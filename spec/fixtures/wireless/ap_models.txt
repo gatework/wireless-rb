@@ -1,0 +1,25 @@
+AP model : WA6520
+Alias : WA6520
+Vendor name : H3C
+Vendor ID : 25506
+License weight : 100
+License type : 1
+Radio count : 2
+Type: : COMMON
+ Radio 1:
+  Mode : 802.11a, 802.11an, 802.11ac, 802.11ax
+  Default mode : 802.11ax
+  BSS count : 8
+ Radio 2:
+  Mode : 802.11b, 802.11g, 802.11gn, 802.11gax
+  Default mode : 802.11gax
+  BSS count : 8
+Version Support List:
+ Hardware Version Ver.A:
+  Software Version : R2595P28
+  Default Software Version : R2595P28
+  Image Name : wa6500a.ipe
+ Hardware Version Ver.B:
+  Software Version : R2595P28
+  Default Software Version : R2595P28
+  Image Name : wa6500a.ipe

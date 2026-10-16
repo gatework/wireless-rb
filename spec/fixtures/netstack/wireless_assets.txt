@@ -1,0 +1,64 @@
+<WLC-LAB-01>display wlan ap all verbose
+Total number of APs : 1
+AP name : AP-LAB-01
+AP ID : 101
+State : Run
+Model : WA6530
+MAC address : 0200-0000-0001
+IP address : 192.0.2.11
+S/W version : R1001
+Client count : 3
+Online time : 0 days 0 hours 20 minutes 1 seconds
+Radio 1 :
+ Admin state : Up
+ Radio type : 802.11ax 6GHz
+ Channel : 1(auto)
+ Channel bandwidth : 80MHz
+ Operating bandwidth : 40MHz
+ Channel usage(%) : 25
+ Noise floor : -90 dBm
+ Max power : 20
+<WLC-LAB-01>
+<WLC-LAB-01>display wlan bss all verbose
+Total number of BSSs : 1
+BSSID : 0200-0000-0201
+BSS ID : 1
+SSID : Lab Corporate
+AP name : AP-LAB-01
+AP ID : 101
+Radio ID : 1
+Service template name : CORPORATE
+VLAN ID : 120
+State : Up
+Client count : 2
+Security mode : RSN
+AKM mode : PSK
+Cipher suite : CCMP
+<WLC-LAB-01>
+<WLC-LAB-01>display wlan client verbose
+Total number of clients : 1
+MAC address : 0200-0000-0101
+IPv4 address : 192.0.2.101
+IPv6 address : 2001:db8::101
+Username : lab-user
+AP ID : 101
+AP name : AP-LAB-01
+Radio ID : 1
+Channel : 1
+Frequency band : 6GHz
+State : Running
+SSID : Lab Corporate
+BSSID : 0200-0000-0201
+VLAN ID : 120
+Wireless mode : 802.11ax
+Channel bandwidth : 20MHz
+SM power save mode : Disabled
+QoS mode : WMM
+RSSI : -62 dBm
+Rx/Tx rate : 5.5/12 Mbps
+Authentication method : Open system
+Security mode : RSN
+AKM mode : PSK
+Cipher suite : CCMP
+Online time : 0 days 4 hours 52 minutes
+<WLC-LAB-01>

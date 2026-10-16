@@ -1,0 +1,24 @@
+Total connections: 2
+User MAC address: 0200-0000-0001
+AP name: AP-LAB
+Radio ID: 1
+SSID: LAB
+BSSID: 0200-0000-0002
+Username: fixture-user
+Anonymous username: N/A
+Authentication domain: LAB
+IPv4 address: 192.0.2.9
+Authentication method: EAP
+Initial VLAN: 120
+Authorization VLAN: 120
+Authorization ACL number: N/A
+Authorization dynamic ACL name: N/A
+Authorization user profile: N/A
+Authorization CAR: N/A
+Authorization URL: N/A
+Authorization IPv6 URL: N/A
+Termination action: Default
+Session timeout last from: N/A
+Session timeout period: N/A
+Online from: 2026/10/16 18:00:00
+Online duration: 0h 47m 56s

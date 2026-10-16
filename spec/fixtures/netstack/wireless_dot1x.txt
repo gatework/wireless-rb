@@ -1,0 +1,21 @@
+Total number of connections : 2
+User MAC address : 0200-0000-0101
+User name : lab-user
+Access interface : WLAN-BSS1
+AP name : AP-LAB-01
+AP ID : 101
+Radio ID : 1
+SSID : Lab EAP
+BSSID : 0200-0000-0201
+IPv4 address : 192.0.2.101
+IPv6 address : 2001:db8::101
+Authentication domain : lab.example
+Authentication protocol : EAP
+Authentication state : Success
+Initial VLAN ID : 120
+Authorized VLAN ID : 121
+Online time : 0 days 4 hours 52 minutes
+Authorization ACL number : 3000
+User MAC address : 0200-0000-0101
+User name : second-session
+Authentication state : Authenticating
