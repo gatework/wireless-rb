@@ -10,17 +10,17 @@ Motor 自有的无线业务实现，参考 Netstack 已验证的命令、字段�
 
 `Motor::Device → Motor::Devices::Connector → Wireless::Collector / CtxDriver::Reader → Configuration / RuntimeParser / NeighborParser → Snapshot → Sync → AssetInventory / DetailInventory`
 
-- 公共 `Connector` 管理凭据、严格主机密钥校验和会话生命周期；[`CtxDriver::Reader`](https://github.com/gatework/ctx_driver) 通过 net-connector 执行单条查询、验证响应并记录来源摘要。每台控制器使用一个会话顺序采集，共享命令只执行、解析一次；单脚本失败不丢弃其他结果，断线后不自动重连。AP 子会话仍由 `ApSession` 管理，每个 AP 的邻居读取和解析分别隔离失败。
+- 公共 `Connector` 管理凭据、严格主机密钥校验和会话生命周期；[`CtxDriver::Reader`](https://github.com/gatework/ctx_driver) 通过宿主注入的会话执行单条查询、验证响应并记录来源摘要。每台控制器使用一个会话顺序采集，共享命令只执行、解析一次；单脚本失败不丢弃其他结果，断线后不自动重连。AP 子会话由 `Collector.new(ap_session: factory)` 注入，每个 AP 的邻居读取和解析分别隔离失败。内置 `ApSession` 仅在宿主自行安装 net-connector 0.11.1 或同系列后续补丁 并显式 `require "wireless/ap_session"` 后可用；默认加载、配置解析和普通控制器采集均不引入传输库。
 - 解析结果使用与数据库字段对应的 Hash。H3C 覆盖 AP、Radio、BSS、Client、AP 组、服务模板、802.1X，以及快照中的 MAC 认证和阻断客户端。Huawei 保留已验证的 AP、Client 表格格式，其他维度明确标记不支持。
 - 配置事实和运行测量分开保存；配置中的最大功率不能当作当前发射功率。PSK、密码、原始配置及认证 URL 不进入快照或错误信息。
-- AP LLDP 需要显式请求，使用控制器中转和显式 AP 凭据。确认 AP 提示符后才读取，退出时确认原控制器提示符；不自动开启 AP console。
+- AP LLDP 需要显式请求和注入 AP 会话工厂；内置适配器使用控制器中转和显式 AP 凭据。确认 AP 提示符后才读取，退出时确认原控制器提示符；若已返回控制器则不再发送 quit，遇到其他提示符则隔离连接。进入 AP、读取、退出及失败关闭均位于同一次控制器租约中，不建立独立 AP 连接；控制器忙碌时不夺取或关闭其他操作。取消继续传播，原始取消不会被清理阶段的第二次取消覆盖；退出和关闭失败分别保留为 cleanup_error 和 close_error。不自动开启 AP console。
 - 外部 I/O 完成后锁控制器，复核控制器、原快照和资产版本，原子提交资产、配置明细、快照及 revision。采集事实与库存投影分开：缺父 AP/Radio 的合法记录保留在原始快照，库存投影记录 `parent_unavailable`，其他独立实体继续入库；存在依赖未满足的维度禁止清理缺失项。身份歧义、模型校验和数据库异常仍使整个事务回滚。AP 档案只标记缺失，人工管理字段保留。
 - 管理 API、Netdisco 同步和既有 Rake 任务名不变。`Motor::Wireless::CliSync` 委托新实现。虚拟控制器及信道继续查询现有表。
 
 
-H3C 具体策略位于 [`lib/wireless/h3c`](../lib/wireless/h3c/profile.rb)，10 条命令分别实现为 `parsers/display_*.rb`。`H3c::Parser` 管理平台输入边界，`VerboseParser` 与 `SessionParser` 复用标签和会话结构，各命令类维护自己的字段和身份规则。`Profile` 统一声明命令、解析类及型号覆盖，`ParserRegistry` 识别 `h3c` / `h3c_wireless`。公共抽象及型号扩展见 [`../ctx_parser`](https://github.com/gatework/ctx_parser)。
+H3C 具体策略位于 [`lib/wireless/h3c`](../lib/wireless/h3c/profile.rb)，10 条命令分别实现为 `parsers/display_*.rb`。`H3c::Parser` 管理平台输入边界，`H3c::RecordParser` 读取标签字段并划分记录；`H3c::Authentication` 复用认证字段和身份定义，各命令类保留自己的格式规则。`Profile` 统一声明命令、解析类及型号覆盖，`ParserRegistry` 识别 `h3c` / `h3c_wireless`。公共抽象及型号扩展见 [`../ctx_parser`](https://github.com/gatework/ctx_parser)。
 
-配置与运行命令共用 `H3c::CommandOutput` 的编码和命令错误边界；配置保留原始换行，运行表格规范化为 LF。`DisplayCurrentConfiguration` 解释语法，`H3c::Configuration` 维护实体身份、AP 组/型号/Radio 的合法归属及模板认证类型。嵌套记录与来源路径由 `Configuration::Scope` 一起构建，逐行状态和捕获复用 `CtxParser::ConfigurationParser`，不在厂商类内重复实现。
+`H3c::Document` 组织配置来源行、横幅与完整性诊断。配置与运行命令共用 `H3c::CommandOutput` 的编码和命令错误边界；配置保留原始换行，运行表格规范化为 LF。共享 `Wireless::Terminal` 在字段清理前检测分页和编辑控制：运行回显受损时拒绝生成事实，配置文档则逐行标记无效来源，保留其他配置及其捕获；横幅内容仍作为普通文本隔离。`DisplayCurrentConfiguration` 解释语法，`H3c::Configuration` 维护实体身份、AP 组/型号/Radio 的合法归属及模板认证类型。嵌套记录与来源路径由 `Configuration::Scope` 一起构建，逐行状态和捕获复用 `CtxParser::Configuration`，不在厂商类内重复实现。
 
 顶层声明只在配置根节点识别。AP、型号或 Radio 内出现 `sysname`、`wlan ap-group`、`wlan service-template` 等顶层声明时，保留未知诊断，不提升为全局对象；配置及共享的组/模板维度均为部分结果，入库保留已有完整明细。重复实体保留首条并标记为部分结果。
 

@@ -30,7 +30,7 @@ RSpec.describe Wireless::H3c::Parsers::DisplayCurrentConfiguration do
       expect(result.status).to eq(:partial)
       expect(result.to_h.inspect).not_to include("PRIVATE")
     end
-    expect { described_class.parse(nil, complete: true) }.to raise_error(ArgumentError, "Runtime output must be text")
+    expect { described_class.parse(nil, complete: true) }.to raise_error(ArgumentError, "Parser input must be text")
     [ "\xFF".b, "sysname WLC\0\n" ].each do |text|
       result = described_class.parse(text, complete: true)
       expect(result.status).to eq(:failed)

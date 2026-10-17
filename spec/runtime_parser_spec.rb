@@ -25,6 +25,27 @@ RSpec.describe Wireless::RuntimeParser do
     CLI
   end
 
+  it "rejects inline pagination and editing controls before parsing runtime facts" do
+    [ "--More--", "-- More --", "broken\e[31mname", "broken\bname", "broken\x7fname" ].each do |name|
+      output = ap_text.sub("AP name : AP-LAB", "AP name : #{name}")
+      observations = parser.parse_many(%i[access_points radios], output, complete: true)
+      observations.each_value do |observation|
+        expect(observation.status).to eq(:partial)
+        expect(observation.records).to be_empty
+        expect(observation.issues).to include(include(code: :invalid_terminal_output, line: 2))
+      end
+    end
+  end
+
+  it "applies terminal validation to standalone command parsers and Huawei observations" do
+    parsed = Wireless::H3c::Parsers::DisplayWlanApAllVerbose.parse(ap_text.sub("AP-LAB", "AP--More--LAB"), complete: true)
+    expect(parsed.status).to eq(:partial)
+    expect(parsed.records).to be_empty
+    parsed = parser.parse(:access_points, "Total : 0\n-- More --\n", platform: :huawei, complete: true)
+    expect(parsed.status).to eq(:partial)
+    expect(parsed.issues).to eq([ { code: :invalid_terminal_output, line: 2 } ])
+  end
+
   it "parses shared AP/radio output into queryable fields and keeps configured power separate" do
     ap = parser.parse(:access_points, ap_text.b, complete: true)
     radio = parser.parse(:radios, ap_text, complete: true)
@@ -94,7 +115,7 @@ RSpec.describe Wireless::RuntimeParser do
     text = "Total number of clients : 1\nMAC address : 0200-0000-0101\nRSSI : 18\nRx/Tx rate : 5500/12000 Kbps\nOnline time : 1d 2h 3m 4s\n"
     parsed = parser.parse(:clients, text, complete: true)
     expect(parsed).to be_complete
-    expect(only_record(parsed.records)).to include(rssi: 18, rx_rate_mbps: 5.5, tx_rate_mbps: 12, uptime_seconds: 93_784)
+    expect(only_record(parsed.records)).to include(rssi: 18, rx_rate_mbps: 5.5, tx_rate_mbps: 12, online_seconds: 93_784)
     expect(only_record(parsed.records)).not_to have_key(:signal_dbm)
     negative = parser.parse(:clients, text.sub("RSSI : 18", "RSSI : -62 dBm"), complete: true)
     expect(only_record(negative.records)).to include(signal_dbm: -62)
@@ -132,5 +153,10 @@ RSpec.describe Wireless::RuntimeParser do
     expect(parsed).to be_complete
     expect(only_record(parsed.records)).to include(operational_status: "online", client_count: 0, uptime_seconds: 93_784)
     expect(parser.parse(:access_points, header, platform: "huawei", complete: true).status).to eq(:failed)
+  end
+  it "rejects malformed dimension requests before interpreting device output" do
+    [ nil, :clients, "clients", [], [ "clients" ], [ :clients, :clients ] ].each do |names|
+      expect { parser.parse_many(names, "Total clients: 0\n", complete: true) }.to raise_error(ArgumentError)
+    end
   end
 end

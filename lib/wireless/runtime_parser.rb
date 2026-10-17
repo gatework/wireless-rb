@@ -2,15 +2,16 @@
 
 require_relative "parser_registry"
 require_relative "fields"
-require_relative "huawei_runtime"
 require_relative "observation"
 
 module Wireless
-  # 将平台解析结果映射为无线维度，同时保留 Huawei 解析入口。
+  # 按平台解析无线观测，统一保留各维度的完整性与诊断。
   class RuntimeParser
     # 保留型号选择信息，供每次解析所选平台使用。
     def initialize(model: nil)
-      @model = model
+      raise ArgumentError, "Device model must be text" unless model.nil? || model.is_a?(String)
+
+      @model = model&.dup&.freeze
     end
 
     # 使用传入平台及保留的型号选择解析单个无线维度。
@@ -20,21 +21,25 @@ module Wireless
 
     # 共享命令仅解析一次，再投影各请求维度。
     def parse_many(names, content, platform: "h3c", complete: false)
-      text = Fields.text(content)
-      if H3c::Parser::UNSUPPORTED.match?(text)
-        return unavailable(names, :unsupported, :unsupported_command)
+      unless names.is_a?(Array) && names.any? && names.all? { |name| name.is_a?(Symbol) } && names.uniq == names
+        raise ArgumentError, "Dimensions must be unique symbols"
       end
-      if platform.to_s == "huawei"
-        return names.to_h { |name| [ name, HuaweiRuntime.new.parse(name, text, complete: complete) ] }
-      end
+      raise ArgumentError, "Completeness must be boolean" unless [ true, false ].include?(complete)
+      raise ArgumentError, "Parser input must be text" unless content.is_a?(String)
 
       profile = ParserRegistry.fetch(platform, model: @model)
+      begin
+        text = Fields.text(content, newlines: :preserve)
+      rescue ArgumentError
+        return unavailable(names, :failed, :invalid_output)
+      end
+      if Terminal.unsupported?(text)
+        return unavailable(names, :unsupported, :unsupported_command)
+      end
       supported, unsupported = names.partition { |name| profile.commands.key?(name) }
       results = supported.empty? ? {} : profile.parse_many(supported, text, complete: complete)
       observations = results.to_h { |name, result| [ name, Observation.new(name: name, **result.to_h) ] }
       observations.merge(unavailable(unsupported, :unsupported, :unsupported_platform_dimension))
-    rescue ArgumentError, IPAddr::InvalidAddressError
-      unavailable(names, :failed, :invalid_output)
     end
 
     private

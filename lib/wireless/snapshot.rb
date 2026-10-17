@@ -16,7 +16,7 @@ module Wireless
           observed_at.is_a?(Time)
         raise ArgumentError, "Invalid wireless snapshot"
       end
-      super(target: CtxParser::Immutable.copy(target), dimensions: dimensions.dup.freeze,
+      super(target: CtxParser::Immutable.copy(target), dimensions: dimensions.to_h { |name, value| [ name, value ] }.freeze,
         observed_at: observed_at.dup.freeze)
     end
 
@@ -33,5 +33,6 @@ module Wireless
 
     # 展示对象身份与状态，避免泄露原始回显或凭据。
     def inspect = "#<#{self.class.name} complete=#{complete?}>"
+    alias to_s inspect
   end
 end

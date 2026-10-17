@@ -16,7 +16,7 @@ module Wireless
   module H3c
     # 声明 H3C 控制器及 AP 策略，共享回显仅解析一次后再投影维度。
     class Profile < CtxParser::Profile
-      CATALOG = CtxParser::CommandCatalog.new([
+      DECLARATIONS = CtxParser::Commands.new([
         { dimensions: [ :client_ip_conflicts ], command: "display wlan statistics client-ip-conflict", parser: Parsers::DisplayWlanStatisticsClientIpConflict },
         { dimensions: [ :ap_models ], command: "display wlan ap-model all", parser: Parsers::DisplayWlanApModelAll },
         { dimensions: %i[access_points radios], command: "display wlan ap all verbose", parser: Parsers::DisplayWlanApAllVerbose },
@@ -28,8 +28,11 @@ module Wireless
         { dimensions: [ :blocked_clients ], command: "display wlan client-security block-mac", parser: Parsers::DisplayWlanClientSecurityBlockMac },
         { dimensions: [ :lldp ], command: "display lldp neighbor-information verbose", parser: Parsers::DisplayLldpNeighborInformationVerbose }
       ])
-      COMMANDS = CATALOG.commands
-      PARSERS = CATALOG.parsers
+      COMMANDS = DECLARATIONS.by_dimension
+      PARSERS = DECLARATIONS.parsers
+
+      # 本平台在当前控制器会话禁用分页。
+      def preparation_command = "screen-length disable"
 
       private
 

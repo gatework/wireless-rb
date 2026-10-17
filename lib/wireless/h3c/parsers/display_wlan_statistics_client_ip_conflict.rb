@@ -41,8 +41,8 @@ module Wireless
           month, day, hour, minute, second = match[6].split(/[- :]/).map(&:to_i)
           raise ArgumentError, "Invalid conflict time" unless Date.valid_date?(2000, month, day) && hour < 24 && minute < 60 && second < 60
 
-          { ip_address: Fields.ip(match[1]), new_mac_address: Fields.mac(match[2]), new_ap_id: Fields.integer(match[3]).to_s,
-            old_mac_address: Fields.mac(match[4]), old_ap_id: Fields.integer(match[5]).to_s, occurred_at: match[6] }
+          { ip_address: Fields.ip_address(match[1]), new_mac_address: Fields.mac_address(match[2]), new_ap_id: Fields.integer(match[3]).to_s,
+            old_mac_address: Fields.mac_address(match[4]), old_ap_id: Fields.integer(match[5]).to_s, occurred_at: match[6] }
         end
       end
     end

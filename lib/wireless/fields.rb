@@ -27,15 +27,15 @@ module Wireless
     end
 
     # 归一化 MAC 地址，拒绝格式错误的输入。
-    def mac(raw)
-      CtxParser::Values.mac(raw)
+    def mac_address(raw)
+      CtxParser::Values.mac_address(raw)
     rescue ArgumentError
       raise ArgumentError, "Invalid wireless MAC"
     end
 
     # 归一化 IP 主机地址，拒绝无效无线身份数据。
-    def ip(raw)
-      CtxParser::Values.host(raw)
+    def ip_address(raw)
+      CtxParser::Values.ip_address(raw)
     rescue IPAddr::Error
       raise
     rescue ArgumentError
@@ -56,11 +56,15 @@ module Wireless
       return if raw.nil?
       match = /\A(-?\d+(?:\.\d+)?)\s*(?:#{Regexp.escape(unit.to_s)})?\z/i.match(raw.to_s)
       raise ArgumentError, "Invalid wireless number" unless match
-      Float(match[1])
+
+      measurement = Float(match[1])
+      raise ArgumentError, "Invalid wireless number" unless measurement.finite?
+
+      measurement
     end
 
     # 将支持的时长格式转换为秒，并校验各时间分量。
-    def duration(raw)
+    def duration_seconds(raw)
       return if raw.nil?
       if /\A\d+:\d{2}:\d{2}:\d{2}\z/.match?(raw)
         days, hours, minutes, seconds = raw.split(":").map(&:to_i)
@@ -74,12 +78,17 @@ module Wireless
     end
 
     # 将成对收发速率转换为每秒兆比特。
-    def rates(raw)
+    def rates_mbps(raw)
       return [ nil, nil ] if raw.nil?
       match = /\A(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)\s*([kmgt]?bps)?\z/i.match(raw)
       raise ArgumentError, "Invalid wireless rates" unless match
       multiplier = { "bps" => 0.000001, "kbps" => 0.001, "mbps" => 1, "gbps" => 1000, "tbps" => 1_000_000 }.fetch((match[3] || "Mbps").downcase)
-      [ match[1], match[2] ].map { |value| Float(value) * multiplier }
+      [ match[1], match[2] ].map do |value|
+        rate = Float(value) * multiplier
+        raise ArgumentError, "Invalid wireless rates" unless rate.finite?
+
+        rate
+      end
     end
 
     # 解析明确无线信道；自动选择仍保持未知。
@@ -92,22 +101,18 @@ module Wireless
     end
 
     # 将支持的 MHz 回显归一化为正数信道宽度。
-    def width(raw)
+    def channel_width_mhz(raw)
       match = /\A(\d+)\s*(?:MHz)?\z/i.match(raw.to_s)
       match[1].to_i if match && match[1].to_i.positive?
     end
 
-    # 根据明确标签或支持的信道范围确定无线频段。
-    def band(hint, channel: nil)
-      return "6GHz" if /6\s*g(?:hz)?/i.match?(hint.to_s)
-      return "5GHz" if /5\s*g(?:hz)?/i.match?(hint.to_s)
-      return "2.4GHz" if /2\.?4\s*g(?:hz)?|802\.11[bg](?:\b|\/)/i.match?(hint.to_s)
-      return unless channel
-      case channel
-      when 1..14 then "2.4GHz"
-      when 15..199 then "5GHz"
-      when 200..233 then "6GHz"
-      end
+    # 信道编号在不同频段重叠，频段须由明确标签或专属 PHY 证据确定。
+    def frequency_band(hint)
+      bands = []
+      bands << "6GHz" if /(?<![\d.])6\s*g(?:hz)?\b/i.match?(hint.to_s)
+      bands << "5GHz" if /(?<![\d.])5\s*g(?:hz)?\b/i.match?(hint.to_s)
+      bands << "2.4GHz" if /(?<![\d.])2\.4\s*g(?:hz)?\b|802\.11[bg](?:\b|\/)/i.match?(hint.to_s)
+      bands.first if bands.one?
     end
 
     # 归一化已知在线、离线标签，同时保留未识别状态。

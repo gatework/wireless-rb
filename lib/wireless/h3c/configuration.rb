@@ -23,6 +23,7 @@ module Wireless
             raise ArgumentError, "Group radio requires a model"
           end
 
+          identity = identity.downcase
           collection = identity.end_with?("g") ? :band_defaults : :radios
           keys = [ collection, identity ]
           keys.unshift(:configuration) if kind == :ap_groups
@@ -37,7 +38,7 @@ module Wireless
 
         # 汇总已解析记录，并报告未解决或不完整的来源状态。
         def finish
-          record[:authentication_type] = authentication if kind == :service_templates
+          record[:authentication_type] = authentication_type if kind == :service_templates
           record
         end
 
@@ -51,29 +52,44 @@ module Wireless
         end
 
         # 解析实际生效的认证方法及外部服务器引用。
-        def authentication
+        def authentication_type
           mode = settings[:client_security_authentication_mode]
-          return "dot1x" if mode == "dot1x" || settings[:akm_modes].include?("dot1x") || settings[:dot1x_domain]
-          return "mab" if mode == "mac" || settings[:mac_authentication_domain]
+          return mode == "mac" ? "mab" : mode if mode
+          return "dot1x" if settings[:akm_modes].include?("dot1x")
           return "psk" if settings[:akm_modes].include?("psk") || settings[:has_preshared_key]
           return "portal" if settings[:portal]&.key?(:enable_method)
           nil
         end
       end
 
+      # 使用模板名索引绑定，保持数组输出并避免每条声明扫描既有绑定。
+      def bind_template(record, name, vlan_id)
+        bindings = (@template_bindings[record] ||= {})
+        binding = { name: name, vlan_id: vlan_id }
+        previous = bindings[name]
+        raise ArgumentError, "Conflicting template binding" if previous && previous != binding
+        return if previous
+
+        bindings[name] = binding
+        record[:service_templates] << binding
+      end
+
       attr_reader :data
 
       # 初始化无线实体集合及配置诊断。
       def initialize
+        @entity_names = Hash.new { |hash, kind| hash[kind] = {} }
+        @template_bindings = {}.compare_by_identity
         @data = { access_points: {}, ap_groups: [], service_templates: [], global_settings: {}, blacklist: [], whitelist: [] }
       end
 
       # 使用实体集合作为身份索引，首条重复记录仅供部分结果保留。
       def entity(kind, name, model: nil, type: nil)
         collection = data.fetch(kind)
-        duplicate = kind == :access_points ? collection.key?(name) : collection.any? { |record| record[:name] == name }
+        duplicate = @entity_names[kind].key?(name)
         raise ArgumentError, "Duplicate wireless configuration identity" if duplicate
 
+        @entity_names[kind][name] = true
         record = case kind
         when :ap_groups
           { name: name, ap_names: [], serial_ids: [], vlan_ids: [], model_profiles: {}, configuration: type ? { type: type } : {} }

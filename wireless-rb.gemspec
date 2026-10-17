@@ -26,6 +26,5 @@ Gem::Specification.new do |spec|
   spec.add_dependency "ctx_parser"
   spec.add_dependency "ctx_driver"
   spec.add_dependency "date"
-  spec.add_dependency "net-connector"
   spec.add_dependency "time"
 end

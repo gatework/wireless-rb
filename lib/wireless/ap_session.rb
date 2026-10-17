@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+# 可选入口单独声明最低连接器版本，核心解析不激活此依赖。
+gem "net-connector", "~> 0.11.1"
 require "net/connector"
 require "ctx_driver"
 require_relative "fields"
@@ -23,79 +25,138 @@ module Wireless
 
     # 校验 AP 凭据，借用控制器会话进行嵌套接入。
     def initialize(controller:, password:, username: nil)
+      unless %i[connected? current_prompt with_operation execute_operation close].all? { |method| controller.respond_to?(method) }
+        raise ArgumentError, "Controller must provide an existing operation-capable session"
+      end
       unless password.is_a?(String) && !password.strip.empty? && !/[\x00-\x1f\x7f]/.match?(password) &&
-          (username.nil? || (username.is_a?(String) && !/[\x00-\x1f\x7f]/.match?(username)))
+          (username.nil? || (username.is_a?(String) && !username.strip.empty? && !/[\x00-\x1f\x7f]/.match?(username)))
         raise ArgumentError, "Invalid AP credentials"
       end
-      @controller, @password, @username = controller, password, username
+      @controller, @password, @username = controller, password.dup.freeze, username&.dup&.freeze
       @usable = true
     end
 
-    # 嵌套登录 AP 读取 LLDP，并确认返回原控制器提示符。
+    # 借用控制器操作租约；进入 AP、查询、退出和失败关闭均不能与其他查询交错。
     def read(access_point:)
-      return { error: :controller_session_lost, skipped: true } unless @usable && @controller.connected?
+      return { error: :controller_session_lost, skipped: true } unless @usable
+      return { error: :ap_address_unavailable, skipped: true } unless access_point.is_a?(Hash)
       return { error: :ap_not_online, skipped: true } unless Fields.online_status(access_point[:operational_status]) == "online"
-      address = Fields.ip(access_point[:management_ip])
-      return { error: :ap_address_unavailable, skipped: true } unless address && IPAddr.new(address).ipv4? && address != "0.0.0.0"
+      address = address_for(access_point)
+      return { error: :ap_address_unavailable, skipped: true } unless address
 
       outcome = {}
+      acquired = false
       @controller.with_operation(:wireless_ap_lldp) do
-        original_prompt = prompt
-        raise Error, :controller_prompt_mismatch unless DEVICE_PROMPT.match?(original_prompt)
-        entered = false
-        returned = false
-        begin
-          interactions = [ Net::Connector::Interaction.new(/password:\s*\z/i, "#{@password}\n", sensitive: true, limit: 1, capture: false) ]
-          interactions.unshift(Net::Connector::Interaction.new(/(?:login|username):\s*\z/i, "#{@username}\n", sensitive: true, limit: 1, capture: false)) if @username
-          login = execute("telnet #{address}", DEVICE_PROMPT, timeout: 10, interactions: interactions)
-          confirm(login)
-          returned = prompt == original_prompt
-          # 只有提示符已切换到 AP 才确认登录，命令成功返回控制器不代表接入成功。
-          entered = prompt != original_prompt && DEVICE_PROMPT.match?(prompt)
-          raise Error, :ap_authentication_failed if AUTHENTICATION_FAILURE.match?(login.output)
-          raise Error, :ap_connection_failed if CONNECTION_FAILURE.match?(login.output)
-          raise Error, :ap_login_not_confirmed unless entered
-          reader = CtxDriver::Reader.new(session: @controller)
-          preparation = reader.read("screen-length disable")
-          raise Error, preparation.failure.fetch(:code) unless preparation.success?
-
-          result = reader.read(COMMAND)
-          outcome[:result] = result
-          raise Error, result.failure.fetch(:code) unless result.success?
-        rescue Error, Net::Connector::Error => error
-          outcome[:error] = error.is_a?(Error) ? error.code : Net::Connector::ErrorMetadata.code(error.code) || :collection_failed
-        ensure
-          begin
-            # 已进入 AP 才发送退出；必须确认返回原提示符后才能继续复用控制器会话。
-            if entered && @controller.connected?
-              confirm(execute("quit", exact_prompt(original_prompt)))
-              returned = prompt == original_prompt
-            end
-            @usable = returned && @controller.connected? && prompt == original_prompt
-          rescue Error, Net::Connector::Error
-            @usable = false
-          end
-          outcome[:cleanup_error] = :ap_exit_failed unless @usable
+        acquired = true
+        unless @usable && @controller.connected?
+          @usable = false
+          next outcome.merge!(error: :controller_session_lost, skipped: true)
         end
+        collect_neighbors(address, outcome)
       end
       outcome
-    rescue ArgumentError, IPAddr::InvalidAddressError
-      { error: :ap_address_unavailable, skipped: true }
-    rescue Error, Net::Connector::Error => error
-      @usable = false
-      { error: error.is_a?(Error) ? error.code : Net::Connector::ErrorMetadata.code(error.code) || :collection_failed }
-    ensure
-      begin
-        @controller.close if !@usable && @controller.connected?
-      rescue Net::Connector::Error
-        outcome[:cleanup_error] = :session_close_failed if outcome
-      end
+    rescue StandardError => error
+      # 未取得租约时不改变共享控制器状态，也不能关闭其他操作持有的连接。
+      outcome ||= {}
+      outcome[:error] ||= error_code(error)
+      outcome[:skipped] = true unless acquired
+      outcome
     end
 
     # 展示对象身份与状态，避免泄露原始回显或凭据。
     def inspect = "#<#{self.class.name} usable=#{@usable}>"
 
     private
+
+    # 地址验证只发生在接入前；后续协议错误不能被误报成未尝试的地址失败。
+    def address_for(access_point)
+      address = Fields.ip_address(access_point[:management_ip])
+      address if address && IPAddr.new(address).ipv4? && address != "0.0.0.0"
+    rescue ArgumentError, IPAddr::Error
+      nil
+    end
+
+    # 同一次控制器租约覆盖完整嵌套操作，未确认返回前始终视为不可复用。
+    def collect_neighbors(address, outcome)
+      original_prompt = prompt
+      raise Error, :controller_prompt_mismatch unless DEVICE_PROMPT.match?(original_prompt)
+
+      ap_prompt = nil
+      returned = false
+      @usable = false
+      begin
+        login = execute("telnet #{address}", DEVICE_PROMPT, timeout: 10, interactions: interactions)
+        confirm(login)
+        current = prompt
+        returned = current == original_prompt
+        ap_prompt = current if !returned && DEVICE_PROMPT.match?(current)
+        raise Error, :ap_authentication_failed if AUTHENTICATION_FAILURE.match?(login.output)
+        raise Error, :ap_connection_failed if CONNECTION_FAILURE.match?(login.output)
+        raise Error, :ap_login_not_confirmed unless ap_prompt
+
+        reader = CtxDriver::Reader.new(session: @controller)
+        preparation = reader.read("screen-length disable")
+        raise Error, preparation.failure.fetch(:code) unless preparation.success?
+        raise Error, :ap_session_lost unless prompt == ap_prompt
+
+        result = reader.read(COMMAND)
+        raise Error, :ap_session_lost if result.success? && prompt != ap_prompt
+        outcome[:result] = result
+        raise Error, result.failure.fetch(:code) unless result.success?
+      rescue StandardError => error
+        outcome[:error] = error_code(error)
+      ensure
+        original_error = $!
+        begin
+          restore(original_prompt, ap_prompt, returned, outcome)
+        rescue Exception # rubocop:disable Lint/RescueException -- 清理期间的二次取消不能覆盖原有取消，所有异常仍向外传播。
+          raise original_error, cause: original_error.cause if original_error
+          raise
+        end
+      end
+    end
+
+    # 登录凭据只进入有次数限制的敏感交互，不构造独立 AP 连接。
+    def interactions
+      values = [ Net::Connector::Interaction.new(/password:\s*\z/i, "#{@password}\n", sensitive: true, limit: 1, capture: false) ]
+      if @username
+        values.unshift(Net::Connector::Interaction.new(/(?:login|username):\s*\z/i, "#{@username}\n", sensitive: true, limit: 1, capture: false))
+      end
+      values
+    end
+
+    # 仅从已确认的 AP 提示符退出；已回控制器时不再发送 quit。
+    def restore(original_prompt, ap_prompt, returned, outcome)
+      if @controller.connected?
+        current = prompt
+        if ap_prompt && current == original_prompt
+          returned = true
+        elsif ap_prompt && current == ap_prompt
+          confirm(execute("quit", exact_prompt(original_prompt)))
+          returned = prompt == original_prompt
+        end
+        @usable = returned && @controller.connected? && prompt == original_prompt
+      end
+    rescue StandardError
+      @usable = false
+    ensure
+      unless @usable
+        outcome[:cleanup_error] = :ap_exit_failed
+        close_controller(outcome)
+      end
+    end
+
+    # 关闭仍位于控制器租约中；退出与关闭失败独立保存，不覆盖已取得的观测。
+    def close_controller(outcome)
+      @controller.close
+    rescue StandardError
+      outcome[:close_error] = :session_close_failed
+    end
+
+    # 所有失败只暴露稳定代码，不把连接器消息或凭据写入领域观测。
+    def error_code(error)
+      error.is_a?(Error) ? error.code : CtxDriver::Failure.code(error, :collection_failed)
+    end
 
     # 渲染当前终端提示符，用于安全核对嵌套会话身份。
     def prompt = Net::Connector::TerminalRenderer.render(@controller.current_prompt.to_s).strip

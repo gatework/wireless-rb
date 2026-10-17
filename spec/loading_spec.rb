@@ -6,6 +6,26 @@ require "rbconfig"
 require "json"
 
 RSpec.describe "Standalone wireless command parsers" do
+  it "loads the public API without loading a transport library" do
+    script = <<~RUBY
+      module Kernel
+        alias wireless_original_require require
+        def require(name)
+          raise LoadError, "Transport library requested" if name.start_with?("net/connector")
+          wireless_original_require(name)
+        end
+      end
+      require "wireless"
+      abort "Transport activated" if defined?(Net::Connector::Base) || $LOADED_FEATURES.any? { |path| path.end_with?("/net/connector.rb") }
+      parsed = Wireless::Configuration.new.parse("sysname WLC\nreturn\n", complete: true)
+      abort "Configuration unavailable" unless parsed.complete?
+      abort "Collector unavailable" unless Wireless::Collector.new
+    RUBY
+    _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-rbundler/setup",
+      "-I", File.expand_path("../lib", __dir__), "-e", script)
+    expect(status).to be_success, stderr
+  end
+
   parsers = {
     "display_wlan_ap_all_verbose" => [ "DisplayWlanApAllVerbose", "Total number of APs : 0\n" ],
     "display_wlan_bss_all_verbose" => [ "DisplayWlanBssAllVerbose", "Current BSS number : 0\n" ],

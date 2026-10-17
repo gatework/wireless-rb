@@ -15,8 +15,6 @@ module Wireless
     def parse(content, complete: false)
       result = @profile.parse(:configuration, content, complete: complete)
       Observation.new(name: :configuration, **result.to_h)
-    rescue ArgumentError
-      Observation.new(name: :configuration, status: :failed, issues: [ { code: :invalid_output } ])
     end
   end
 end

@@ -233,4 +233,58 @@ RSpec.describe Wireless::H3c::Parsers::DisplayCurrentConfiguration do
     expect(result.records.first[:global_settings][:mac_authentication_user_name_format]).to eq("mac-address with-hyphen uppercase")
     expect(parser.parse("mac-authentication user-name-format future SECRET\nreturn\n", complete: true).status).to eq(:partial)
   end
+  it "keeps command error phrases in ordinary configuration values" do
+    [ "Unknown command", "Invalid input", "Unrecognized command", "Wrong parameter", "Error: command" ].each do |ssid|
+      source = "sysname AC\nwlan service-template office\n ssid #{ssid}\nreturn\n"
+      result = parser.parse(source, complete: true)
+      expect(result).to be_complete
+      expect(result.records.first[:service_templates].first[:ssid]).to eq(ssid)
+      expect(Wireless::RuntimeParser.new.parse(:configuration, source, complete: true)).to be_complete
+    end
+    expect(parser.parse("% Unrecognized command found at '^' position.\r", complete: true).status).to eq(:unsupported)
+    expect(parser.parse("Error: Unknown command\n", complete: true).status).to eq(:unsupported)
+  end
+
+  it "keeps paginated or terminal-damaged configuration partial at every source position" do
+    [ "--More--\nsysname AC\nreturn\n", "sysname AC\n--More--\nreturn\n",
+      "sysname AC\nwlan service-template office\n ssid Off--More--ice\nreturn\n",
+      "sysname AC\n\e[31mignored terminal text\nreturn\n" ].each do |source|
+      result = parser.parse(source, complete: true)
+      expect(result.status).to eq(:partial)
+      expect(result.issues).to include(include(code: :incomplete_configuration))
+    end
+  end
+
+  it "retains damaged source and marks its enclosing template capture incomplete" do
+    source = "wlan service-template office\n ssid Office\n --More--\n service-template enable\nreturn\n"
+    result = parser.parse(source, complete: true)
+    capture = parser.cursor.captures_for([ :service_templates, 0 ]).fetch(0)
+    expect(result.status).to eq(:partial)
+    expect(capture).not_to be_complete
+    expect(capture.content).to include(" --More--\n")
+    expect(capture.data).to include(ssid: "Office", enabled: true)
+    expect(parser.cursor.state(2)).to eq(:invalid)
+  end
+
+  it "preserves raw controls and incomplete capture state without accepting a damaged SSID" do
+    [ "\b", "\x7f", "\e7" ].each do |control|
+      source = "wlan service-template office\r\n ssid Off#{control}ice\r\n service-template enable\r\nreturn\r\n"
+      result = parser.parse(source, complete: true)
+      expect(result.status).to eq(:partial)
+      expect(result.issues).to include(code: :incomplete_configuration, line: 2)
+      expect(result.records.first[:service_templates].first[:ssid]).to be_nil
+      expect(parser.cursor.content).to eq(source)
+      expect(parser.cursor.captures_for([ :service_templates, 0 ]).first).not_to be_complete
+    end
+  end
+
+  it "isolates banner contents from configuration, command errors, and pagination diagnostics" do
+    source = "header legal %\nUnknown command\n--More--\nwlan service-template forged\n ssid FORGED\n%\nsysname AC\nreturn\n"
+    result = parser.parse(source, complete: true)
+    expect(result).to be_complete
+    expect(result.records.first[:service_templates]).to be_empty
+    expect(result.records.first[:global_settings][:hostname]).to eq("AC")
+    expect(parser.parse("header legal %\nnot closed\n", complete: true)).not_to be_complete
+    expect(parser.document.issues).to include(code: :incomplete_banner)
+  end
 end

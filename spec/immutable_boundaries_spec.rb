@@ -66,4 +66,29 @@ RSpec.describe "Immutable facts and evidence" do
       expect(value.observed_at).to be_frozen
     end
   end
+  it "rejects mutable observation names" do
+    expect { Wireless::Observation.new(name: +"clients", status: :complete) }.to raise_error(ArgumentError)
+  end
+
+  it "does not preserve caller hash defaults in snapshot dimensions" do
+    [ Hash.new({ secret: +"PRIVATE_DEFAULT" }), Hash.new { raise "caller callback" } ].each do |dimensions|
+      observation = Wireless::Observation.new(name: :clients, status: :complete)
+      dimensions[:clients] = observation
+      snapshot = Wireless::Snapshot.new(target: {}, dimensions: dimensions)
+      expect(snapshot.dimensions[:missing]).to be_nil
+      expect(snapshot.dimensions[:clients]).to equal(observation)
+    end
+  end
+
+  it "keeps fact, target and projection contents out of display strings" do
+    observation = Wireless::Observation.new(name: :clients, status: :complete,
+      records: [ { username: "PRIVATE_FACT" } ], evidence: [ { detail: "PRIVATE_EVIDENCE" } ])
+    snapshot = Wireless::Snapshot.new(target: { secret: "PRIVATE_TARGET" }, dimensions: { clients: observation })
+    projection = Wireless::Projection.new(dimensions: { clients: { status: :complete, detail: "PRIVATE_PROJECTION" } })
+    [ observation, snapshot, projection ].each do |value|
+      expect(value.inspect).not_to include("PRIVATE_")
+      expect(value.to_s).to eq(value.inspect)
+      expect("#{value}").not_to include("PRIVATE_")
+    end
+  end
 end

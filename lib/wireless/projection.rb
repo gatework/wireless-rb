@@ -12,5 +12,9 @@ module Wireless
 
     # 判断所有请求的资产投影是否均已完成。
     def complete? = dimensions.values.all? { |entry| entry.fetch(:status) == :complete }
+
+    # 展示应用范围，不在日志字符串中序列化应用详情。
+    def inspect = "#<#{self.class.name} dimensions=#{dimensions.size}>"
+    alias to_s inspect
   end
 end

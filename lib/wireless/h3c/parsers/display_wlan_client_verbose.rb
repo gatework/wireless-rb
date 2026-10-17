@@ -1,17 +1,17 @@
 # frozen_string_literal: true
 
-require_relative "../session_parser"
+require_relative "../record_parser"
 
 module Wireless
   module H3c
     module Parsers
       # 解析客户端会话，区分相对 RSSI 与实测 dBm。
-      class DisplayWlanClientVerbose < SessionParser
+      class DisplayWlanClientVerbose < RecordParser
         MAPPING = COMMON_FIELDS.merge("mac address" => :client_mac, "ipv4 address" => :client_ip,
           "ip address" => :client_ip, "ipv6 address" => :client_ipv6, "username" => :username,
           "channel" => :channel, "frequency band" => :band, "state" => :operational_status, "status" => :operational_status,
           "wireless mode" => :protocol, "channel bandwidth" => :channel_width, "sm power save mode" => :power_save,
-          "sm power save" => :power_save, "qos mode" => :qos, "online time" => :uptime_seconds,
+          "sm power save" => :power_save, "qos mode" => :qos, "online time" => :online_seconds,
           "authentication method" => :auth_method, "security mode" => :security, "akm mode" => :akm,
           "cipher suite" => :cipher).freeze
         DETAILS = [ "authorization car", "authorization acl id", "authorization user profile", "key derivation",
@@ -29,15 +29,21 @@ module Wireless
         private
 
         # 归一化成对客户端速率，区分相对 RSSI 与实测 dBm。
-        def assign_session_field(record, label, raw, issues, line)
+        def assign_record_field(record, label, raw, issues, line)
           case label
           when "rx/tx rate"
-            safely(issues, line) { record[:rx_rate_mbps], record[:tx_rate_mbps] = Fields.rates(raw) }
+            parse_field(issues, line) do
+              rx, tx = Fields.rates_mbps(raw)
+              assign_value(record, :rx_rate_mbps, rx, issues, line)
+              assign_value(record, :tx_rate_mbps, tx, issues, line)
+            end
           when "rssi"
-            safely(issues, line) do
+            parse_field(issues, line) do
               signal = Fields.number(raw, unit: "dBm")
-              record[:signal_dbm] = signal if signal&.negative?
-              record[:rssi] = signal.round if signal&.positive?
+              assign_value(record, :signal_dbm, signal&.negative? ? signal : nil, issues, line)
+              assign_value(record, :rssi, signal&.positive? ? signal.round : nil, issues, line)
+              record.delete(:signal_dbm) if record[:signal_dbm].nil?
+              record.delete(:rssi) if record[:rssi].nil?
             end
           else
             super

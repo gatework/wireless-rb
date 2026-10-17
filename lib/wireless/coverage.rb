@@ -7,24 +7,34 @@ module Wireless
   class Coverage
     # 绑定观测、投影结果及请求的新鲜度时间窗。
     def initialize(observations:, projection:, dimensions:, now:, stale_after:)
+      unless now.is_a?(Time) && stale_after.is_a?(Numeric) && stale_after.real? && stale_after.finite? && stale_after >= 0
+        raise ArgumentError, "Coverage requires a clock time and a finite nonnegative freshness window"
+      end
+
       @observations, @projection, @dimensions = observations, projection || {}, dimensions
-      @now, @stale_after = now, stale_after
+      @now, @stale_after_seconds = now, stale_after
     end
 
     # 历史资产清单不声明 CLI 完整性，保持既有纯 Netdisco 视图兼容。
     def to_h
       return { "state" => "untracked", "source" => "inventory", "dimensions" => {} } unless @observations
 
-      dimensions = @dimensions.to_h { |name| [ name.to_s, dimension(name.to_s) ] }
+      dimensions = @dimensions.to_h { |name| [ name.to_s, dimension_coverage(name.to_s) ] }
       states = dimensions.values.map { |entry| entry.fetch("state") }
-      state = states.all?("complete") ? "complete" : states.include?("unknown") ? "unknown" : "stale"
+      state = if states.empty? || states.include?("unknown")
+        "unknown"
+      elsif states.all?("complete")
+        "complete"
+      else
+        "stale"
+      end
       { "state" => state, "source" => "cli", "dimensions" => dimensions }
     end
 
     private
 
     # 新记录不能刷新旧命令或失败命令的时效；投影受阻不算完整覆盖。
-    def dimension(name)
+    def dimension_coverage(name)
       stored = @observations.fetch(name, {})
       latest = stored.fetch("latest", {})
       projection = @projection.fetch(name, {})
@@ -35,7 +45,7 @@ module Wireless
         [ "unknown", latest.empty? ? "not_requested" : "collection_#{latest['status']}" ]
       elsif !at || at > @now
         [ "unknown", "observation_time_unknown" ]
-      elsif @now - at > @stale_after
+      elsif @now - at > @stale_after_seconds
         [ "stale", "evidence_stale" ]
       elsif @projection.key?(name) && projected_at != at
         [ "unknown", "projection_time_unconfirmed" ]

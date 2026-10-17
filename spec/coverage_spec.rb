@@ -40,4 +40,19 @@ RSpec.describe Wireless::Coverage do
     expect(coverage(at: now.iso8601,
       projection: { "access_points" => { "status" => "complete", "observed_at" => now.iso8601 } }).fetch("state")).to eq("complete")
   end
+  it "keeps an empty selected evidence scope unknown" do
+    result = described_class.new(observations: {}, projection: {}, dimensions: [], now: now, stale_after: 3600).to_h
+    expect(result).to include("state" => "unknown", "dimensions" => {})
+  end
+
+  it "rejects invalid clocks and freshness windows instead of certifying evidence indefinitely" do
+    [ -1, Float::NAN, Float::INFINITY, "3600", nil ].each do |window|
+      expect do
+        described_class.new(observations: {}, projection: {}, dimensions: [ :access_points ], now: now, stale_after: window)
+      end.to raise_error(ArgumentError)
+    end
+    expect do
+      described_class.new(observations: {}, projection: {}, dimensions: [ :access_points ], now: "2026-10-17", stale_after: 3600)
+    end.to raise_error(ArgumentError)
+  end
 end

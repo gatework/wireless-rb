@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-require_relative "../verbose_parser"
+require_relative "../record_parser"
 
 module Wireless
   module H3c
     module Parsers
       # 型号能力与发现的 AP 资产及 Radio 分开保存。
-      class DisplayWlanApModelAll < VerboseParser
+      class DisplayWlanApModelAll < RecordParser
         MODEL_FIELDS = { "alias" => :alias, "vendor name" => :vendor_name, "vendor id" => :vendor_id,
           "license weight" => :license_weight, "license type" => :license_type, "radio count" => :radio_count, "type" => :type }.freeze
         RADIO_FIELDS = { "mode" => :modes, "default mode" => :default_mode, "bss count" => :bss_count }.freeze
@@ -22,8 +22,8 @@ module Wireless
           lines = text.lines
           model = section = nil
           mapping = MODEL_FIELDS
-          tokens(text, issues).each do |label, raw, line|
-            safely(issues, line) do
+          read_fields(text, issues).each do |label, raw, line|
+            parse_field(issues, line) do
               if label == "ap model"
                 raise ArgumentError, "Missing AP model" unless raw
                 model = { model: raw, radios: [], versions: [] }
@@ -48,7 +48,7 @@ module Wireless
             end
           end
           records.each { |record| validate_model(record, issues) }
-          Fields.result(records, issues: issues, complete: complete, total: count(text, "AP models"), identity: [ :model ])
+          Fields.result(records, issues: issues, complete: complete, total: record_count(text, "AP models", issues), identity: [ :model ])
         end
 
         # 根据声明字段类型归一化型号能力值。

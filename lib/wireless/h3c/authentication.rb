@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-require_relative "session_parser"
+require_relative "record_parser"
 
 module Wireless
   module H3c
-    # 认证命令共享字段语法及复合会话身份。
-    class AuthenticationParser < SessionParser
-      MAPPING = COMMON_FIELDS.except("vlan id", "service vlan id").merge(
+    # 认证命令共享字段映射、详情及复合会话身份。
+    module Authentication
+      MAPPING = RecordParser::COMMON_FIELDS.except("vlan id", "service vlan id").merge(
         "mac address" => :mac_address, "user mac address" => :mac_address, "username" => :username, "user name" => :username,
         "access interface" => :interface, "interface" => :interface, "ip address" => :ip_address,
         "ipv4 address" => :ip_address, "ipv6 address" => :ipv6_address, "authentication domain" => :domain, "domain" => :domain,
