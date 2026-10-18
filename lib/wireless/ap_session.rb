@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 # 可选入口单独声明最低连接器版本，核心解析不激活此依赖。
-gem "net-connector", "~> 0.11.1"
+gem "net-connector", ">= 0.13.0"
 require "net/connector"
+gem "ctx_driver", ">= 0.2.2"
 require "ctx_driver"
 require_relative "fields"
 
@@ -159,7 +160,7 @@ module Wireless
     end
 
     # 渲染当前终端提示符，用于安全核对嵌套会话身份。
-    def rendered_prompt = Net::Connector::TerminalRenderer.render(@controller.current_prompt.to_s).strip
+    def rendered_prompt = Net::Connector::Terminal::Text.render(@controller.current_prompt.to_s).strip
 
     # 只有匹配原控制器提示符，才确认 AP 会话清理完成。
     def exact_prompt_pattern(value) = /(?:\A|(?<=[\r\n]))[ \t\x00]*#{Regexp.escape(value)}[ \t\x00]*[\r\n]*\z/

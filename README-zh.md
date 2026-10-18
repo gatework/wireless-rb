@@ -77,7 +77,7 @@ end
 
 `Collector#collect(connector:, target:, platform:, model: nil, dimensions:, ap_credentials: nil, ap_names: [])` 使用宿主注入的 connector，普通采集仅要求会话提供 `connected?` 和 `send_commands`。AP LLDP 通过 `Collector.new(ap_session_factory: factory)` 显式注入；factory 接收 `controller:` 和按需解析的 `ap_credentials` 关键字，返回提供 `read(access_point:)` 的对象。需要查询 AP 但未注入工厂时，仅 LLDP 返回 `ap_session_required`，不读取 AP 凭据，也不影响控制器清单。
 
-内置 AP 登录适配器可选使用。宿主须自行声明 `gem "net-connector", "~> 0.11.1", require: false`，并显式加载和注入：
+内置 AP 登录适配器可选使用。宿主须自行声明 `gem "net-connector", ">= 0.13.0", require: false`，使用 `ctx_driver >= 0.2.2`，并显式加载和注入：
 
 ```ruby
 require "wireless"

@@ -19,7 +19,7 @@ module Wireless
         # 解释当前命令记录，保留不完整行诊断。
         def parse_text(text, complete:)
           records, issues = [], []
-          lines = text.lines
+          lines = text.lines("\n")
           model = section = nil
           mapping = MODEL_FIELDS
           read_fields(text, issues).each do |label, raw, line|
@@ -40,8 +40,7 @@ module Wireless
                 model[:versions] << section
                 mapping = VERSION_FIELDS
               elsif section && (field = mapping[label])
-                raise ArgumentError, "Duplicate model field" if section.key?(field)
-                section[field] = convert_model_field(field, raw)
+                assign_value(section, field, convert_model_field(field, raw), issues, line)
               else
                 issues << { code: :unrecognized_field, line: line }
               end

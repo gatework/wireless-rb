@@ -62,4 +62,23 @@ RSpec.describe "H3C conflict and AP model observations" do
       expect(parser.parse(name, "", platform: "huawei", complete: true).status).to eq(:unsupported)
     end
   end
+
+  [
+    [ "Vendor ID : 25506", "Vendor ID : 25507", [ :vendor_id ] ],
+    [ "BSS count : 8", "BSS count : 16", [ :radios, 0, :bss_count ] ],
+    [ "Software Version : R2595P28", "Software Version : R2595P29", [ :versions, 0, :software_version ] ]
+  ].each do |original, conflicting, path|
+    it "accepts equivalent repeated #{path.last} model fields" do
+      result = parser.parse(:ap_models, models.sub(original, "#{original}\n#{original}"), complete: true)
+      expect(result).to be_complete
+      expect(result.records).to eq(parser.parse(:ap_models, models, complete: true).records)
+    end
+
+    it "removes conflicting #{path.last} model fields without reviving earlier values" do
+      result = parser.parse(:ap_models, models.sub(original, "#{original}\n#{conflicting}\n#{original}"), complete: true)
+      expect(result).to be_partial
+      expect(result.records.first.dig(*path)).to be_nil
+      expect(result.issues).to include(hash_including(code: :conflicting_field))
+    end
+  end
 end

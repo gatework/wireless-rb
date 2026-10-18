@@ -12,7 +12,7 @@ module Wireless
         # 解释当前命令记录，保留不完整行诊断。
         def parse_text(text, complete:)
           records, issues = [], []
-          text.lines.each_with_index do |line, index|
+          text.lines("\n").each_with_index do |line, index|
             row = line.strip
             next if row.empty? || /\A[-=]+\z/.match?(row) || /\A(?:No blocked clients|MAC address\b.*|(?:Client )?block list|Blocked clients|Total.*:\s*\d+)\z/i.match?(row)
             if (match = /\A((?:[0-9a-f]{4}-){2}[0-9a-f]{4}|(?:[0-9a-f]{2}:){5}[0-9a-f]{2})\s*(.*?)\z/i.match(row))

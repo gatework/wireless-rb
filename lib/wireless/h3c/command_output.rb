@@ -30,7 +30,7 @@ module Wireless
       def reported_total(text, noun:, issues:, continuation_lines: nil)
         prefix = /\A(?:Total\b|Number of (?:#{noun})\b|Current BSS number\b)/i
         totals = []
-        text.each_line.with_index do |line, index|
+        text.each_line("\n").with_index do |line, index|
           row = line.strip
           next if continuation_lines&.key?(index + 1)
           next unless prefix.match?(row)

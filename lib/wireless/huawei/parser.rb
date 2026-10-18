@@ -23,7 +23,7 @@ module Wireless
         records, issues = [], []
         header = false
         total = nil
-        text.lines.each_with_index do |line, index|
+        text.lines("\n").each_with_index do |line, index|
           row = line.strip
           next if row.empty? || /\A[-=]+\z/.match?(row)
           if (match = /\ATotal\s*:\s*(\d+)\z/i.match(row))

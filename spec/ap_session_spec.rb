@@ -30,7 +30,7 @@ RSpec.describe Wireless::ApSession do
   end
 
   def receipt(command, body, prompt, error: nil)
-    Net::Connector::Result.new(steps: [ Net::Connector::CommandResult.new(command: command,
+    Net::Connector::Result.new(steps: [ Net::Connector::Command::Result.new(command: command,
       output: "#{command.text}\r\n#{body}#{prompt}", prompt: prompt, duration: 0.1) ], config: body, error: error)
   end
 
@@ -121,7 +121,7 @@ RSpec.describe Wireless::ApSession do
   end
 
   it "closes an unconfirmed login even if the last cached prompt was still the controller" do
-    allow(controller).to receive(:execute_operation).and_return(Net::Connector::Result.new(error: Net::Connector::CommandTimeout.new("private login")))
+    allow(controller).to receive(:execute_operation).and_return(Net::Connector::Result.new(error: Net::Connector::CommandTimeout.new("private login", code: :command_timeout)))
     outcome = reader.read(access_point: ap)
     expect(outcome[:error]).to eq(:command_timeout)
     expect(controller).to have_received(:close).once
@@ -172,7 +172,7 @@ RSpec.describe Wireless::ApSession do
   end
 
   it "does not close or poison a controller owned by another operation" do
-    allow(controller).to receive(:with_operation).and_raise(Net::Connector::SessionBusy.new("private owner"))
+    allow(controller).to receive(:with_operation).and_raise(Net::Connector::SessionBusy.new("private owner", code: :session_busy))
     expect(controller).not_to receive(:close)
     expect(reader.read(access_point: ap)).to eq(error: :session_busy, skipped: true)
     allow(controller).to receive(:with_operation).and_yield

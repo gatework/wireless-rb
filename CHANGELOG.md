@@ -2,6 +2,15 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
+## 0.3.1 (2026-10-18)
+
+- Clear Bundler bootstrap variables when verifying packages in an isolated gem installation, including calls made through bundle exec.
+
+- Align the optional AP adapter with net-connector >= 0.13.0 and ctx_driver >= 0.2.2, using current terminal rendering and typed diagnostic codes while preserving controller leases and cancellation.
+
+- Apply shared conflict handling to AP model, Radio capability, and software fields: equivalent repeats remain complete, while conflicting values are removed and cannot be restored by later repeats.
+- Parse CLI records with explicit newline separators so host changes to Ruby `$/` cannot merge source rows or corrupt totals.
+
 ## 0.3.0 (2026-10-18)
 
 - Name the internal H3C record builder `H3c::ConfigurationBuilder` (`wireless/h3c/configuration_builder`) and shared authentication field definitions `H3c::AuthenticationFields` (`wireless/h3c/authentication_fields`). Keep the public `Wireless::Configuration` entry point and `wireless/configuration` require path. Renamed internal constants and paths have no aliases.

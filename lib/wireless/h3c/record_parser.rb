@@ -39,7 +39,7 @@ module Wireless
 
       # 返回字段标签、原始值与来源行号，保留明确允许的续行。
       def read_fields(text, issues)
-        text.lines.each_with_index.each_with_object([]) do |(line, index), fields|
+        text.lines("\n").each_with_index.each_with_object([]) do |(line, index), fields|
           row = line.strip
           next if row.empty? || /\A[-=]+\z/.match?(row)
           if (match = /\A([^:]+?)\s*:\s*(.*)\z/.match(row))

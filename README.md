@@ -79,7 +79,7 @@ Radio channel, bandwidth, transmit-power and enable/disable settings, plus templ
 
 `Collector#collect(connector:, target:, platform:, model: nil, dimensions:, ap_credentials: nil, ap_names: [])` uses a host-supplied connector; ordinary collection only requires `connected?` and `send_commands` on its sessions. For AP LLDP, inject `Collector.new(ap_session_factory: factory)`. The factory receives `controller:` plus lazily resolved `ap_credentials` keywords and returns an object with `read(access_point:)`. When APs need querying but no factory was supplied, only LLDP reports `ap_session_required`; credentials are not read and controller observations remain available.
 
-The included AP login adapter is optional. Declare `gem "net-connector", "~> 0.11.1", require: false` in the host application, then load and inject it explicitly:
+The included AP login adapter is optional. Declare `gem "net-connector", ">= 0.13.0", require: false` in the host application, use `ctx_driver >= 0.2.2`, then load and inject it explicitly:
 
 ```ruby
 require "wireless"

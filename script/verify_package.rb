@@ -11,7 +11,7 @@ abort "Unexpected package" unless spec.name == "wireless-rb"
 abort "Transport must be optional" if spec.runtime_dependencies.any? { |dependency| dependency.name == "net-connector" }
 abort "Unexpected package contents" if spec.files.any? { |path| path.start_with?("spec/", "test/", "storage/", "tmp/") || path.end_with?(".log", ".gem") }
 Dir.mktmpdir("gem-install-") do |home|
-  env = ENV.to_h.keys.grep(/\A(?:BUNDLE_|RUBY)/).to_h { |key| [ key, nil ] }
+  env = ENV.to_h.keys.grep(/\A(?:BUNDLE_|BUNDLER_|RUBY)/).to_h { |key| [ key, nil ] }
   env.merge!("GEM_HOME" => home, "GEM_PATH" => home, "RUBYOPT" => nil, "RUBYLIB" => nil)
   ruby = RbConfig.ruby
   system(env, ruby, "-S", "gem", "install", artifact, "--no-document", exception: true)

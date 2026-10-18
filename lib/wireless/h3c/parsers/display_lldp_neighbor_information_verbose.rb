@@ -48,7 +48,7 @@ module Wireless
             end
             current = nil
           end
-          text.lines.each_with_index do |line, index|
+          text.lines("\n").each_with_index do |line, index|
             row = line.strip
             next if row.empty? || /\A[-=]+\z/.match?(row)
             if description_indent && line[/\A\s*/].size > description_indent

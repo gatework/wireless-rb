@@ -14,7 +14,7 @@ module Wireless
         def parse_text(text, complete:)
           records, issues = [], []
           header = false
-          text.lines.each_with_index do |line, index|
+          text.lines("\n").each_with_index do |line, index|
             row = line.strip
             next if row.empty? || /\A[-=]+\z/.match?(row)
             if /\AIP\s+New-MAC\/APID\s+Old-MAC\/APID\s+Time\z/i.match?(row)

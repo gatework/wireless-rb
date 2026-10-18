@@ -10,7 +10,7 @@ Motor 自有的无线业务实现，参考 Netstack 已验证的命令、字段�
 
 `Motor::Device → Motor::Devices::Connector → Wireless::Collector / CtxDriver::Reader → Configuration / RuntimeParser / NeighborParser → Snapshot → Sync → AssetInventory / DetailInventory`
 
-- 公共 `Connector` 管理凭据、严格主机密钥校验和会话生命周期；[`CtxDriver::Reader`](https://github.com/gatework/ctx_driver) 通过宿主注入的会话执行单条查询、验证响应并记录来源摘要。每台控制器使用一个会话顺序采集，共享命令只执行、解析一次；单脚本失败不丢弃其他结果，断线后不自动重连。AP 子会话由 `Collector.new(ap_session_factory: factory)` 注入，每个 AP 的邻居读取和解析分别隔离失败。内置 `ApSession` 仅在宿主自行安装 net-connector 0.11.1 或同系列后续补丁 并显式 `require "wireless/ap_session"` 后可用；默认加载、配置解析和普通控制器采集均不引入传输库。
+- 公共 `Connector` 管理凭据、严格主机密钥校验和会话生命周期；[`CtxDriver::Reader`](https://github.com/gatework/ctx_driver) 通过宿主注入的会话执行单条查询、验证响应并记录来源摘要。每台控制器使用一个会话顺序采集，共享命令只执行、解析一次；单脚本失败不丢弃其他结果，断线后不自动重连。AP 子会话由 `Collector.new(ap_session_factory: factory)` 注入，每个 AP 的邻居读取和解析分别隔离失败。内置 `ApSession` 仅在宿主自行安装 net-connector 0.13.0 及以上版本，并使用 ctx_driver 0.2.2 及以上版本 并显式 `require "wireless/ap_session"` 后可用；默认加载、配置解析和普通控制器采集均不引入传输库。
 - 解析结果使用与数据库字段对应的 Hash。H3C 覆盖 AP、Radio、BSS、Client、AP 组、服务模板、802.1X，以及快照中的 MAC 认证和阻断客户端。Huawei 保留已验证的 AP、Client 表格格式，其他维度明确标记不支持。
 - 配置事实和运行测量分开保存；配置中的最大功率不能当作当前发射功率。PSK、密码、原始配置及认证 URL 不进入快照或错误信息。
 - AP LLDP 需要显式请求和注入 AP 会话工厂；内置适配器使用控制器中转和显式 AP 凭据。确认 AP 提示符后才读取，退出时确认原控制器提示符；若已返回控制器则不再发送 quit，遇到其他提示符则隔离连接。进入 AP、读取、退出及失败关闭均位于同一次控制器租约中，不建立独立 AP 连接；控制器忙碌时不夺取或关闭其他操作。取消继续传播，原始取消不会被清理阶段的第二次取消覆盖；退出和关闭失败分别保留为 cleanup_error 和 close_error。不自动开启 AP console。
