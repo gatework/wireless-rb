@@ -14,12 +14,16 @@ module Wireless
     # 解析 LLDP 端点，并关联采集上下文提供的 AP 身份。
     def parse(content, ap_name:, complete: false)
       raise ArgumentError, "Missing AP name" unless ap_name.is_a?(String) && !ap_name.strip.empty?
+      raise ArgumentError, "Parser input must be text" unless content.is_a?(String)
+      raise ArgumentError, "Completeness must be boolean" unless [ true, false ].include?(complete)
+
+      unless @profile.commands.key?(:lldp)
+        return Observation.new(name: :lldp, status: :unsupported, issues: [ { code: :unsupported_platform_dimension } ])
+      end
 
       result = @profile.parse(:lldp, content, complete: complete)
       records = result.records.map { |record| record.merge(ap_name: ap_name) }
       Observation.new(name: :lldp, **result.to_h.merge(records: records))
-    rescue ArgumentError
-      Observation.new(name: :lldp, status: :failed, issues: [ { code: :invalid_output } ])
     end
   end
 end

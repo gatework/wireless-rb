@@ -66,6 +66,24 @@ RSpec.describe "Immutable facts and evidence" do
       expect(value.observed_at).to be_frozen
     end
   end
+  it "requires observation timestamps to be Time values or nil when constructing and replacing facts" do
+    observation = Wireless::Observation.new(name: :clients, status: :complete)
+    [ :started_at, :completed_at ].each do |field|
+      [ "2026-10-18T00:00:00Z", [ +"caller-owned" ], {}, 1, false ].each do |invalid|
+        expect do
+          Wireless::Observation.new(name: :clients, status: :complete, **{ field => invalid })
+        end.to raise_error(ArgumentError)
+        expect { observation.with(**{ field => invalid }) }.to raise_error(ArgumentError)
+      end
+      time = Time.utc(2026, 10, 18)
+      replaced = observation.with(**{ field => time })
+      expect(replaced.public_send(field)).to eq(time)
+      expect(replaced.public_send(field)).not_to equal(time)
+      expect(replaced.public_send(field)).to be_frozen
+      expect(replaced.with(**{ field => nil }).public_send(field)).to be_nil
+    end
+  end
+
   it "rejects mutable observation names" do
     expect { Wireless::Observation.new(name: +"clients", status: :complete) }.to raise_error(ArgumentError)
   end

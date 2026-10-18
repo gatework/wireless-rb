@@ -5,7 +5,7 @@ require_relative "record_parser"
 module Wireless
   module H3c
     # 认证命令共享字段映射、详情及复合会话身份。
-    module Authentication
+    module AuthenticationFields
       MAPPING = RecordParser::COMMON_FIELDS.except("vlan id", "service vlan id").merge(
         "mac address" => :mac_address, "user mac address" => :mac_address, "username" => :username, "user name" => :username,
         "access interface" => :interface, "interface" => :interface, "ip address" => :ip_address,

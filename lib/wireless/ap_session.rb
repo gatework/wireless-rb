@@ -41,7 +41,7 @@ module Wireless
       return { error: :controller_session_lost, skipped: true } unless @usable
       return { error: :ap_address_unavailable, skipped: true } unless access_point.is_a?(Hash)
       return { error: :ap_not_online, skipped: true } unless Fields.online_status(access_point[:operational_status]) == "online"
-      address = address_for(access_point)
+      address = ap_ipv4_address(access_point)
       return { error: :ap_address_unavailable, skipped: true } unless address
 
       outcome = {}
@@ -52,7 +52,7 @@ module Wireless
           @usable = false
           next outcome.merge!(error: :controller_session_lost, skipped: true)
         end
-        collect_neighbors(address, outcome)
+        capture_ap_lldp(address, outcome)
       end
       outcome
     rescue StandardError => error
@@ -69,7 +69,7 @@ module Wireless
     private
 
     # 地址验证只发生在接入前；后续协议错误不能被误报成未尝试的地址失败。
-    def address_for(access_point)
+    def ap_ipv4_address(access_point)
       address = Fields.ip_address(access_point[:management_ip])
       address if address && IPAddr.new(address).ipv4? && address != "0.0.0.0"
     rescue ArgumentError, IPAddr::Error
@@ -77,17 +77,17 @@ module Wireless
     end
 
     # 同一次控制器租约覆盖完整嵌套操作，未确认返回前始终视为不可复用。
-    def collect_neighbors(address, outcome)
-      original_prompt = prompt
+    def capture_ap_lldp(address, outcome)
+      original_prompt = rendered_prompt
       raise Error, :controller_prompt_mismatch unless DEVICE_PROMPT.match?(original_prompt)
 
       ap_prompt = nil
       returned = false
       @usable = false
       begin
-        login = execute("telnet #{address}", DEVICE_PROMPT, timeout: 10, interactions: interactions)
-        confirm(login)
-        current = prompt
+        login = execute_sensitive_command("telnet #{address}", DEVICE_PROMPT, timeout: 10, interactions: login_interactions)
+        require_single_command_success(login)
+        current = rendered_prompt
         returned = current == original_prompt
         ap_prompt = current if !returned && DEVICE_PROMPT.match?(current)
         raise Error, :ap_authentication_failed if AUTHENTICATION_FAILURE.match?(login.output)
@@ -97,10 +97,10 @@ module Wireless
         reader = CtxDriver::Reader.new(session: @controller)
         preparation = reader.read("screen-length disable")
         raise Error, preparation.failure.fetch(:code) unless preparation.success?
-        raise Error, :ap_session_lost unless prompt == ap_prompt
+        raise Error, :ap_session_lost unless rendered_prompt == ap_prompt
 
         result = reader.read(COMMAND)
-        raise Error, :ap_session_lost if result.success? && prompt != ap_prompt
+        raise Error, :ap_session_lost if result.success? && rendered_prompt != ap_prompt
         outcome[:result] = result
         raise Error, result.failure.fetch(:code) unless result.success?
       rescue StandardError => error
@@ -108,7 +108,7 @@ module Wireless
       ensure
         original_error = $!
         begin
-          restore(original_prompt, ap_prompt, returned, outcome)
+          restore_controller_or_close(original_prompt, ap_prompt, returned, outcome)
         rescue Exception # rubocop:disable Lint/RescueException -- 清理期间的二次取消不能覆盖原有取消，所有异常仍向外传播。
           raise original_error, cause: original_error.cause if original_error
           raise
@@ -117,7 +117,7 @@ module Wireless
     end
 
     # 登录凭据只进入有次数限制的敏感交互，不构造独立 AP 连接。
-    def interactions
+    def login_interactions
       values = [ Net::Connector::Interaction.new(/password:\s*\z/i, "#{@password}\n", sensitive: true, limit: 1, capture: false) ]
       if @username
         values.unshift(Net::Connector::Interaction.new(/(?:login|username):\s*\z/i, "#{@username}\n", sensitive: true, limit: 1, capture: false))
@@ -126,16 +126,16 @@ module Wireless
     end
 
     # 仅从已确认的 AP 提示符退出；已回控制器时不再发送 quit。
-    def restore(original_prompt, ap_prompt, returned, outcome)
+    def restore_controller_or_close(original_prompt, ap_prompt, returned, outcome)
       if @controller.connected?
-        current = prompt
+        current = rendered_prompt
         if ap_prompt && current == original_prompt
           returned = true
         elsif ap_prompt && current == ap_prompt
-          confirm(execute("quit", exact_prompt(original_prompt)))
-          returned = prompt == original_prompt
+          require_single_command_success(execute_sensitive_command("quit", exact_prompt_pattern(original_prompt)))
+          returned = rendered_prompt == original_prompt
         end
-        @usable = returned && @controller.connected? && prompt == original_prompt
+        @usable = returned && @controller.connected? && rendered_prompt == original_prompt
       end
     rescue StandardError
       @usable = false
@@ -159,20 +159,20 @@ module Wireless
     end
 
     # 渲染当前终端提示符，用于安全核对嵌套会话身份。
-    def prompt = Net::Connector::TerminalRenderer.render(@controller.current_prompt.to_s).strip
+    def rendered_prompt = Net::Connector::TerminalRenderer.render(@controller.current_prompt.to_s).strip
 
     # 只有匹配原控制器提示符，才确认 AP 会话清理完成。
-    def exact_prompt(value) = /(?:\A|(?<=[\r\n]))[ \t\x00]*#{Regexp.escape(value)}[ \t\x00]*[\r\n]*\z/
+    def exact_prompt_pattern(value) = /(?:\A|(?<=[\r\n]))[ \t\x00]*#{Regexp.escape(value)}[ \t\x00]*[\r\n]*\z/
 
     # 通过连接器操作边界执行敏感 AP 交互。
-    def execute(text, prompt, timeout: 30, interactions: [])
+    def execute_sensitive_command(text, prompt, timeout: 30, interactions: [])
       command = Net::Connector::Command.new(text, prompt: prompt, timeout: timeout, interactions: interactions,
         sensitive: true, output_sensitive: true)
       @controller.execute_operation(Net::Connector::Script.new([ command ]), name: :wireless_ap_lldp, privilege: false)
     end
 
     # 要求恰好一条交互命令成功完成。
-    def confirm(result)
+    def require_single_command_success(result)
       raise result.error, cause: nil unless result.success?
       raise Error, :ap_response_missing unless result.steps.one?
     end

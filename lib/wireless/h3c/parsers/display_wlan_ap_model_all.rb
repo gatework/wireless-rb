@@ -23,7 +23,7 @@ module Wireless
           model = section = nil
           mapping = MODEL_FIELDS
           read_fields(text, issues).each do |label, raw, line|
-            parse_field(issues, line) do
+            with_field_validation(issues, line) do
               if label == "ap model"
                 raise ArgumentError, "Missing AP model" unless raw
                 model = { model: raw, radios: [], versions: [] }
@@ -41,18 +41,18 @@ module Wireless
                 mapping = VERSION_FIELDS
               elsif section && (field = mapping[label])
                 raise ArgumentError, "Duplicate model field" if section.key?(field)
-                section[field] = model_value(field, raw)
+                section[field] = convert_model_field(field, raw)
               else
                 issues << { code: :unrecognized_field, line: line }
               end
             end
           end
-          records.each { |record| validate_model(record, issues) }
-          Fields.result(records, issues: issues, complete: complete, total: record_count(text, "AP models", issues), identity: [ :model ])
+          records.each { |record| check_model_completeness(record, issues) }
+          Fields.result(records, issues: issues, complete: complete, total: reported_record_total(text, "AP models", issues), identity: [ :model ])
         end
 
         # 根据声明字段类型归一化型号能力值。
-        def model_value(field, raw)
+        def convert_model_field(field, raw)
           return Fields.integer(raw) if INTEGER_FIELDS.include?(field)
           return raw&.split(/\s*,\s*/) if field == :modes
 
@@ -60,7 +60,7 @@ module Wireless
         end
 
         # 输出可作为权威事实的型号能力前，先校验其有效性。
-        def validate_model(record, issues)
+        def check_model_completeness(record, issues)
           radios = record[:radios]
           if record[:radio_count].nil? || record[:radio_count] != radios.size ||
               radios.any? { |radio| %i[modes default_mode bss_count].any? { |key| radio[key].nil? } }

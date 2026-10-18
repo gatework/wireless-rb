@@ -132,6 +132,27 @@ RSpec.describe "Wireless parser integrity" do
     expect(result.records).to be_empty
   end
 
+  it "enforces the same VLAN bounds for Huawei stations and H3C clients" do
+    [ 0, 4095 ].each do |vlan|
+      text = "STA MAC AP ID Ap name Rf/WLAN\n0200-0000-0101 1 AP-A 1/1 5G ax 1/2 -60 #{vlan} 192.0.2.1 Lab run 2001:db8::1 0 1h\nTotal: 1\n"
+      result = parser.parse(:clients, text, platform: :huawei, complete: true)
+      expect(result).not_to be_complete
+      expect(result.records).to be_empty
+      result = parser.parse(:clients, "Total: 1\n#{client}VLAN ID: #{vlan}\n", complete: true)
+      expect(result).not_to be_complete
+      expect(result.records.first).not_to have_key(:vlan)
+    end
+    [ 1, 4094 ].each do |vlan|
+      text = "STA MAC AP ID Ap name Rf/WLAN\n0200-0000-0101 1 AP-A 1/1 5G ax 1/2 -60 #{vlan} 192.0.2.1 Lab run 2001:db8::1 0 1h\nTotal: 1\n"
+      result = parser.parse(:clients, text, platform: :huawei, complete: true)
+      expect(result).to be_complete
+      expect(result.records.first[:vlan]).to eq(vlan)
+      result = parser.parse(:clients, "Total: 1\n#{client}VLAN ID: #{vlan}\n", complete: true)
+      expect(result).to be_complete
+      expect(result.records.first[:vlan]).to eq(vlan)
+    end
+  end
+
   it "keeps deep unsupported configuration subtrees partial without Ruby recursion" do
     text = "wlan ap AP model TEST\n" + (1..4000).map { |depth| " " * depth + "future-option\n" }.join + "return\n"
     result = Wireless::H3c::Parsers::DisplayCurrentConfiguration.parse(text, complete: true)

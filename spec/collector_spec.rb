@@ -66,7 +66,7 @@ RSpec.describe Wireless::Collector do
     credentials = double("Lazy AP credentials")
     expect(credentials).not_to receive(:call)
 
-    expect(collect(:access_points, ap_connection: credentials)).to be_complete
+    expect(collect(:access_points, ap_credentials: credentials)).to be_complete
   end
 
   it "requires an explicit AP session factory while retaining the controller inventory" do
@@ -82,7 +82,7 @@ RSpec.describe Wireless::Collector do
     outputs["display wlan ap all verbose"] = "Total number of APs : 1\nAP name : AP-LAB\nAP ID : 7\nState : Run\n"
     credentials = double("Lazy AP credentials")
     expect(credentials).not_to receive(:call)
-    expect(collect(:lldp, ap_connection: credentials).dimension(:lldp).issues).to eq([ { code: :ap_session_required } ])
+    expect(collect(:lldp, ap_credentials: credentials).dimension(:lldp).issues).to eq([ { code: :ap_session_required } ])
   end
 
   it "collects AP neighbors through a host-supplied reader without requiring a password" do
@@ -95,7 +95,7 @@ RSpec.describe Wireless::Collector do
     expect(ap_reader).to receive(:read).with(access_point: include(name: "AP-LAB")).and_return(result: capture)
     factory = double("AP session factory")
     expect(factory).to receive(:call).with(controller: session).once.and_return(ap_reader)
-    reader = described_class.new(ap_session: factory)
+    reader = described_class.new(ap_session_factory: factory)
     result = reader.collect(connector: connector, target: target, platform: :h3c, dimensions: [ :lldp ])
     expect(result.dimension(:lldp)).to be_complete
     expect(result.dimension(:lldp).evidence.first).to include(ap_name: "AP-LAB", attempted: true, status: :complete)
@@ -106,7 +106,7 @@ RSpec.describe Wireless::Collector do
     ap_reader = double("AP reader")
     expect(ap_reader).to receive(:read).with(access_point: include(name: "AP-1")).and_raise(IOError, "private endpoint")
     expect(ap_reader).to receive(:read).with(access_point: include(name: "AP-2")).and_return(error: :ap_not_online, skipped: true)
-    reader = described_class.new(ap_session: ->(controller:) { ap_reader })
+    reader = described_class.new(ap_session_factory: ->(controller:) { ap_reader })
     result = reader.collect(connector: connector, target: target, platform: :h3c, dimensions: [ :lldp, :clients ])
     expect(result.dimension(:clients)).to be_complete
     expect(result.dimension(:access_points)).to be_complete
@@ -123,7 +123,7 @@ RSpec.describe Wireless::Collector do
       evidence: [ { sha256: "synthetic", observed_at: now.iso8601, kind: :other, ap_name: "OTHER-AP",
         command: "unrelated-command", attempted: false, status: :failed, neighbor_count: 99 } ])
     ap_reader = double("AP reader", read: { result: capture })
-    reader = described_class.new(ap_session: ->(controller:) { ap_reader })
+    reader = described_class.new(ap_session_factory: ->(controller:) { ap_reader })
 
     result = reader.collect(connector: connector, target: target, platform: :h3c, dimensions: [ :lldp ])
 
@@ -140,7 +140,7 @@ RSpec.describe Wireless::Collector do
       capture = CtxDriver::Capture.new(command: attributes[:command], body: "No LLDP neighbors\n",
         started_at: now, completed_at: now)
       ap_reader = double("AP reader", read: { result: capture, skipped: attributes[:skipped] })
-      reader = described_class.new(ap_session: ->(controller:) { ap_reader })
+      reader = described_class.new(ap_session_factory: ->(controller:) { ap_reader })
 
       result = reader.collect(connector: connector, target: target, platform: :h3c, dimensions: [ :lldp ])
 
@@ -151,12 +151,42 @@ RSpec.describe Wireless::Collector do
     end
   end
 
+  it "retains safe failed AP capture diagnostics and skipped execution without duplicate outcome fields" do
+    outputs["display wlan ap all verbose"] = "Total number of APs : 1\nAP name : AP-LAB\nAP ID : 7\nState : Run\n"
+    now = Time.utc(2026, 10, 17)
+    capture = CtxDriver::Capture.new(command: Wireless::H3c::Profile::COMMANDS.fetch(:lldp),
+      started_at: now, completed_at: now, skipped: true,
+      failure: { code: :session_closed, stage: :session, error_type: "IOError", message: "private device text" })
+    ap_reader = double("AP reader", read: { result: capture })
+    reader = described_class.new(ap_session_factory: ->(controller:) { ap_reader })
+
+    result = reader.collect(connector: connector, target: target, platform: :h3c, dimensions: [ :lldp ])
+
+    expect(result.dimension(:access_points)).to be_complete
+    expect(result.dimension(:lldp).issues).to eq([ { code: :session_closed, stage: :session, error_type: "IOError", ap_name: "AP-LAB" } ])
+    expect(result.dimension(:lldp).evidence.first).to include(attempted: false, status: :failed)
+  end
+
+  it "combines AP skipped flags and does not repeat the capture failure as an outcome error" do
+    outputs["display wlan ap all verbose"] = "Total number of APs : 1\nAP name : AP-LAB\nAP ID : 7\nState : Run\n"
+    now = Time.utc(2026, 10, 17)
+    capture = CtxDriver::Capture.new(command: Wireless::H3c::Profile::COMMANDS.fetch(:lldp),
+      started_at: now, completed_at: now, failure: { code: :session_closed, stage: :session })
+    ap_reader = double("AP reader", read: { result: capture, error: :session_closed, skipped: true })
+    reader = described_class.new(ap_session_factory: ->(controller:) { ap_reader })
+
+    result = reader.collect(connector: connector, target: target, platform: :h3c, dimensions: [ :lldp ])
+
+    expect(result.dimension(:lldp).issues).to eq([ { code: :session_closed, stage: :session, ap_name: "AP-LAB" } ])
+    expect(result.dimension(:lldp).evidence.first).to include(attempted: false, status: :failed)
+  end
+
   it "does not construct an AP reader or resolve credentials for an empty complete inventory" do
     factory, credentials = double("AP factory"), double("AP credentials")
     expect(factory).not_to receive(:call)
     expect(credentials).not_to receive(:call)
-    result = described_class.new(ap_session: factory).collect(connector: connector, target: target,
-      platform: :h3c, dimensions: [ :lldp ], ap_connection: credentials)
+    result = described_class.new(ap_session_factory: factory).collect(connector: connector, target: target,
+      platform: :h3c, dimensions: [ :lldp ], ap_credentials: credentials)
     expect(result.dimension(:lldp)).to be_complete
     expect(result.dimension(:lldp).records).to be_empty
   end
@@ -170,7 +200,7 @@ RSpec.describe Wireless::Collector do
   it "keeps AP setup failures separate from controller connection failures" do
     outputs["display wlan ap all verbose"] = "Total number of APs : 1\nAP name : AP-LAB\nAP ID : 7\nState : Run\n"
     factory = ->(controller:) { raise IOError, "private adapter details" }
-    result = described_class.new(ap_session: factory).collect(connector: connector, target: target,
+    result = described_class.new(ap_session_factory: factory).collect(connector: connector, target: target,
       platform: :h3c, dimensions: [ :lldp, :clients ])
     expect(result.dimension(:clients)).to be_complete
     expect(result.dimension(:access_points)).to be_complete
@@ -213,8 +243,8 @@ RSpec.describe Wireless::Collector do
     factory = double("AP factory")
     expect(factory).to receive(:call).with(controller: session, password: "example").and_return(ap_reader)
 
-    result = described_class.new(ap_session: factory).collect(connector: connector, target: target,
-      platform: :h3c, dimensions: [ :lldp ], ap_connection: { controller: Object.new, password: "example" })
+    result = described_class.new(ap_session_factory: factory).collect(connector: connector, target: target,
+      platform: :h3c, dimensions: [ :lldp ], ap_credentials: { controller: Object.new, password: "example" })
 
     expect(result.dimension(:access_points)).to be_complete
     expect(result.dimension(:lldp).issues).to include(code: :ap_not_online, ap_name: "AP-LAB")
@@ -229,7 +259,7 @@ RSpec.describe Wireless::Collector do
       selected.first.replace("AP-2")
       ap_reader
     end
-    result = described_class.new(ap_session: factory).collect(connector: connector, target: target,
+    result = described_class.new(ap_session_factory: factory).collect(connector: connector, target: target,
       platform: :h3c, dimensions: [ :lldp ], ap_names: selected)
     expect(result.dimension(:lldp).evidence.map { |entry| entry[:ap_name] }).to eq([ "AP-1" ])
   end

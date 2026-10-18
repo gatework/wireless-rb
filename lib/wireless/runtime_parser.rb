@@ -31,21 +31,21 @@ module Wireless
       begin
         text = Fields.text(content, newlines: :preserve)
       rescue ArgumentError
-        return unavailable(names, :failed, :invalid_output)
+        return unavailable_observations(names, :failed, :invalid_output)
       end
       if Terminal.unsupported?(text)
-        return unavailable(names, :unsupported, :unsupported_command)
+        return unavailable_observations(names, :unsupported, :unsupported_command)
       end
       supported, unsupported = names.partition { |name| profile.commands.key?(name) }
       results = supported.empty? ? {} : profile.parse_many(supported, text, complete: complete)
       observations = results.to_h { |name, result| [ name, Observation.new(name: name, **result.to_h) ] }
-      observations.merge(unavailable(unsupported, :unsupported, :unsupported_platform_dimension))
+      observations.merge(unavailable_observations(unsupported, :unsupported, :unsupported_platform_dimension))
     end
 
     private
 
     # 构建明确不可用的观测，不虚构成功的空结果。
-    def unavailable(names, status, code)
+    def unavailable_observations(names, status, code)
       names.to_h { |name| [ name, Observation.new(name: name, status: status, issues: [ { code: code } ]) ] }
     end
   end

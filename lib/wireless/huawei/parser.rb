@@ -38,7 +38,7 @@ module Wireless
             issues << { code: :missing_header, line: index + 1 }
           else
             begin
-              records << (name == :access_points ? ap(row.split) : client(row.split))
+              records << (name == :access_points ? parse_ap_row(row.split) : parse_client_row(row.split))
             rescue ArgumentError, IPAddr::InvalidAddressError
               issues << { code: :invalid_row, line: index + 1 }
             end
@@ -61,7 +61,7 @@ module Wireless
       end
 
       # 归一化控制器报告的单条 AP 记录。
-      def ap(columns)
+      def parse_ap_row(columns)
         raise ArgumentError, "Invalid AP row" unless columns.size == 9
         id, mac, name, group, ip, model, state, clients, uptime = columns
         { ap_id: Fields.integer(id).to_s, mac_address: Fields.mac_address(mac), name: name, group_name: group,
@@ -70,7 +70,7 @@ module Wireless
       end
 
       # 归一化控制器报告的单条无线客户端记录。
-      def client(columns)
+      def parse_client_row(columns)
         raise ArgumentError, "Invalid station row" unless columns.size == 15
         mac, ap_id, ap_name, radio_wlan, band, protocol, rates, rssi, vlan, ip, ssid, state, ipv6, _ac_id, uptime = columns
         raise ArgumentError, "Invalid station identity" unless /\A\d+\/\d+\z/.match?(radio_wlan)
@@ -78,7 +78,7 @@ module Wireless
         signal = Fields.number(Fields.value(rssi), unit: "dBm")
         { client_mac: Fields.mac_address(mac), ap_id: Fields.integer(ap_id).to_s, ap_name: ap_name, radio_id: radio_wlan.split("/").first,
           band: Fields.frequency_band(band), protocol: protocol, rx_rate_mbps: rx, tx_rate_mbps: tx, signal_dbm: signal == 0 ? nil : signal,
-          vlan: Fields.integer(vlan, max: 4094), client_ip: Fields.ip_address(Fields.value(ip)), ssid: ssid, operational_status: state,
+          vlan: Fields.vlan_id(vlan), client_ip: Fields.ip_address(Fields.value(ip)), ssid: ssid, operational_status: state,
           client_ipv6: ipv6_address(Fields.value(ipv6)), uptime_seconds: Fields.duration_seconds(Fields.value(uptime)) }
       end
     end

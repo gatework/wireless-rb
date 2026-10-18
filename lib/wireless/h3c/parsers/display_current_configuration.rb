@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../command_output"
-require_relative "../configuration"
+require_relative "../configuration_builder"
 require_relative "../document"
 require "ctx_parser/configuration"
 
@@ -22,7 +22,7 @@ module Wireless
 
         # 仅构建一次来源块，再将解释结果关联到行状态。
         def parse_text(text, complete:)
-          @configuration = H3c::Configuration.new
+          @configuration = H3c::ConfigurationBuilder.new
           @issues = []
           @setting_assignments = {}.compare_by_identity
           read_configuration(text, comments: nil, boundaries: /\A(?:#|return)\z/, document_class: Document)
@@ -37,17 +37,17 @@ module Wireless
 
         # 未知块独立拥有其后代，不能将其放入外层作用域解释。
         def parse_block(block, owner = nil)
-          analyze(block) { parse_setting(block, owner) }
+          analyze(block) { parse_statement(block, owner) }
         rescue ArgumentError, IPAddr::InvalidAddressError
           @issues << { code: :invalid_configuration_line, line: block.line }
-          block.children.each { |child| unrecognized_block(child) }
+          block.children.each { |child| mark_unsupported_subtree(child) }
           false
         end
 
         # 在所属父级配置作用域内解释一项支持的设置。
-        def parse_setting(block, owner)
+        def parse_statement(block, owner)
           line = block.text
-          selected = owner ? nested_scope(line, owner) : root_scope(line)
+          selected = owner ? build_nested_scope(line, owner) : build_root_scope(line)
           if selected
             parse_scope(block, selected)
             true
@@ -59,7 +59,7 @@ module Wireless
           elsif owner
             apply_block(block, owner)
           elsif /\A(?:undo )?(?:wlan|dot1x|mac-authentication)\b/i.match?(line)
-            apply_block(block, @configuration.global)
+            apply_block(block, @configuration.build_global_scope)
             true
           else
             ignore(block)
@@ -68,7 +68,7 @@ module Wireless
         end
 
         # 返回由顶层无线配置语句选定的型号作用域。
-        def root_scope(line)
+        def build_root_scope(line)
           if (match = /\Awlan (ap-group|service-template|ap) (\S+)(?: (.+))?\z/i.match(line))
             kind = { "ap-group" => :ap_groups, "service-template" => :service_templates, "ap" => :access_points }.fetch(match[1].downcase)
             name, suffix = match[2], match[3]
@@ -77,27 +77,27 @@ module Wireless
             end
             raise ArgumentError, "Invalid service template" if kind == :service_templates && suffix
             raise ArgumentError, "Missing AP model" if kind == :access_points && !/\Amodel \S+\z/i.match?(suffix.to_s)
-            @configuration.entity(kind, name, model: suffix&.sub(/\Amodel /i, ""), type: suffix&.sub(/\Atype /i, ""))
+            @configuration.build_entity_scope(kind, name, model: suffix&.sub(/\Amodel /i, ""), type: suffix&.sub(/\Atype /i, ""))
           elsif (match = /\Awlan (global-configuration|virtual-ap-group(?: \S+)?|ap-license-group|vip-client-group)\z/i.match(line))
             key = match[1].tr("-", "_").split.first.to_sym
-            @configuration.global(key, identity: line.split[2])
+            @configuration.build_global_scope(key, identity: line.split[2])
           end
         end
 
         # 仅选择所属配置模型允许的作用域。
-        def nested_scope(line, owner)
+        def build_nested_scope(line, owner)
           case line
-          when /\Aap-model (.+)\z/ then owner.model(Regexp.last_match(1))
-          when /\Aradio (\d+|2\.4g|5g|6g)\z/i then owner.radio(Regexp.last_match(1))
+          when /\Aap-model (.+)\z/ then owner.build_model_scope(Regexp.last_match(1))
+          when /\Aradio (\d+|2\.4g|5g|6g)\z/i then owner.build_radio_scope(Regexp.last_match(1))
           when /\A(?:gigabitethernet|smartrate-ethernet|ethernet|ten-gigabitethernet) \d+\z/i
-            owner.ethernet(line)
+            owner.build_ethernet_scope(line)
           end
         end
 
         # 标记已识别叶子语句，不将其嵌套未知语法提升到父对象。
         def apply_block(block, owner)
-          unless apply(owner, block, @configuration.data)
-            unrecognized_block(block)
+          unless apply_setting(owner, block, @configuration.data)
+            mark_unsupported_subtree(block)
             return false
           end
 
@@ -114,7 +114,7 @@ module Wireless
         end
 
         # 逐来源行记录不支持语法，并保留完整来源块。
-        def unrecognized_block(block)
+        def mark_unsupported_subtree(block)
           pending = [ block ]
           until pending.empty?
             current = pending.pop
@@ -130,7 +130,7 @@ module Wireless
           until pending.empty?
             current = pending.pop
             if /\A(?:undo )?wlan\b/i.match?(current.text)
-              unrecognized_block(current)
+              mark_unsupported_subtree(current)
             else
               cursor.mark(current.index, state: :ignored)
               pending.concat(current.children.reverse)
@@ -140,7 +140,7 @@ module Wireless
         end
 
         # 报告未在预期作用域消费的相关子语句。
-        def unparsed_child(block) = unrecognized_block(block)
+        def unparsed_child(block) = mark_unsupported_subtree(block)
 
         # 每个声明块独立检查单值；重复进入的顺序配置仍保留各自来源快照。
         def parse_scope(block, owner)
@@ -151,7 +151,7 @@ module Wireless
             if owner.kind == :service_templates && @setting_assignments.values.any? { |fields| fields.values.any? { |entry| entry[:conflicted] } }
               owner.record[:authentication_type] = nil
             else
-              owner.finish
+              owner.finalize_record
             end
             owner.record
           end
@@ -180,15 +180,8 @@ module Wireless
           end
         end
 
-        # 未声明的可选 VLAN 保持未知，已声明值须在设备 VLAN 范围内。
-        def configured_vlan(raw)
-          vlan = Fields.integer(raw, max: 4094)
-          raise ArgumentError, "Invalid configured VLAN" if vlan && vlan.zero?
-          vlan
-        end
-
         # 将已识别的无线设置应用到当前作用域记录。
-        def apply(scope, block, config)
+        def apply_setting(scope, block, config)
           line = block.text
           owner, kind, record = scope.record, scope.kind, scope.settings
           words = line.split
@@ -213,7 +206,7 @@ module Wireless
             return false unless kind == :ap_groups
             owner[:ap_names] << words.last
           when /\Avlan (\d+)\z/
-            vlan = configured_vlan(words.last)
+            vlan = Fields.vlan_id(words.last)
             kind == :ap_groups ? owner[:vlan_ids] << vlan : assign_setting(owner, :vlan_id, vlan, block)
           when /\Assid (.+)\z/
             return false unless kind == :service_templates
@@ -224,12 +217,15 @@ module Wireless
           when /\Aservice-template (\S+)(?: vlan (\d+))?\z/
             return false unless kind == :radio
             name, vlan = Regexp.last_match.captures
-            @configuration.bind_template(record, name, configured_vlan(vlan))
+            @configuration.bind_template(record, name, Fields.vlan_id(vlan))
           when /\Apreshared-key\s+.+\z/i
+            return false unless kind == :service_templates
             assign_setting(record, :has_preshared_key, true, block)
           when /\Aakm mode (.+)\z/
+            return false unless kind == :service_templates
             assign_setting(record, :akm_modes, Regexp.last_match(1).downcase.gsub("802.1x", "dot1x").split, block)
           when /\A(cipher-suite|security-ie) (.+)\z/
+            return false unless kind == :service_templates
             key = words.first == "cipher-suite" ? :cipher_suites : :security_ies
             assign_setting(record, key, words.drop(1).map(&:downcase), block)
           when /\Aclient-security authentication-mode (.+)\z/
@@ -267,6 +263,7 @@ module Wireless
           when /\A(?:undo )?(beacon ssid-hide|bss transition-management enable)\z/
             assign_setting(record, line.include?("ssid-hide") ? :ssid_hidden : :btm_enabled, enabled, block)
           when /\A(client keep-alive|client-rate-limit|firmware-upgrade|radio) (enable|disable)\z/
+            return false if words.first == "radio" && kind != :radio
             key = { "client keep-alive" => :client_keep_alive, "client-rate-limit" => :client_rate_limit_enabled,
               "firmware-upgrade" => :firmware_upgrade, "radio" => :enabled }.fetch(Regexp.last_match(1))
             assign_setting(record, key, words.last == "enable", block)
@@ -278,14 +275,20 @@ module Wireless
           when /\A(?:description|map-configuration) (.+)\z/
             assign_setting(record, words.first.tr("-", "_").to_sym, words.drop(1).join(" "), block)
           when /\Abackup-ac ip (\S+)\z/ then assign_setting(record, :backup_ac_ip, Fields.ip_address(words.last), block)
-          when /\Achannel band-width (.+)\z/ then assign_setting(record, :channel_bandwidth, Regexp.last_match(1), block)
+          when /\Achannel band-width (.+)\z/
+            return false unless kind == :radio
+            assign_setting(record, :channel_bandwidth, Regexp.last_match(1), block)
           when /\Achannel auto unlock\z/
+            return false unless kind == :radio
             assign_settings(record, :channel_setting, { channel: "auto", channel_number: nil, channel_unlocked: true }, block)
           when /\Achannel (.+)\z/
+            return false unless kind == :radio
             channel = Regexp.last_match(1)
             channel_number = Fields.channel(channel)
             assign_settings(record, :channel_setting, { channel: channel, channel_number: channel_number }, block)
-          when /\Amax-power (\d+(?:\.\d+)?)\z/ then assign_setting(record, :max_power, Fields.number(words.last), block)
+          when /\Amax-power (\d+(?:\.\d+)?)\z/
+            return false unless kind == :radio
+            assign_setting(record, :max_power, Fields.number(words.last), block)
           when /\Aclient-rate-limit (inbound|outbound) mode (\S+) cir (\d+)\z/
             assign_setting(record[:client_rate_limit] ||= {}, words[1].to_sym, { mode: words[3], cir_bps: Fields.integer(words.last) * 1000 }, block)
           when /\Arate (mandatory|supported|disabled|multicast) (.+)\z/

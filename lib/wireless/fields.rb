@@ -51,6 +51,14 @@ module Wireless
       raise ArgumentError, "Invalid wireless integer"
     end
 
+    # VLAN 业务身份限定为 1..4094，未声明的可选绑定保持未知。
+    def vlan_id(raw)
+      vlan = integer(raw, max: 4094)
+      raise ArgumentError, "Invalid wireless VLAN" if vlan && vlan.zero?
+
+      vlan
+    end
+
     # 解析数值测量，不将未知文本转换为零。
     def number(raw, unit: nil)
       return if raw.nil?

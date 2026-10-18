@@ -32,13 +32,13 @@ module Wireless
         def assign_record_field(record, label, raw, issues, line)
           case label
           when "rx/tx rate"
-            parse_field(issues, line) do
+            with_field_validation(issues, line) do
               rx, tx = Fields.rates_mbps(raw)
               assign_value(record, :rx_rate_mbps, rx, issues, line)
               assign_value(record, :tx_rate_mbps, tx, issues, line)
             end
           when "rssi"
-            parse_field(issues, line) do
+            with_field_validation(issues, line) do
               signal = Fields.number(raw, unit: "dBm")
               assign_value(record, :signal_dbm, signal&.negative? ? signal : nil, issues, line)
               assign_value(record, :rssi, signal&.positive? ? signal.round : nil, issues, line)

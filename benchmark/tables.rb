@@ -19,6 +19,14 @@ def measure(expected:)
   samples.min_by { |sample| sample[:milliseconds] }
 end
 
+# 大型 LF 回显同时验证完整扫描与首行失败的短路路径。
+terminal_body = "AP name: synthetic\n" * 100_000
+{ "terminal_full_scan" => [ terminal_body, false ],
+  "terminal_first_error" => [ "Unrecognized command\n" + terminal_body, true ] }.each do |name, (text, expected)|
+  stats = measure(expected: expected) { Wireless::Terminal.unsupported?(text) }
+  puts JSON.generate(case: name, count: 100_000, **stats)
+end
+
 [ 500, 2000, 5000 ].each do |count|
   templates = (1..count).map { |index| "wlan service-template T#{index}\n ssid T#{index}\n#\n" }.join + "return\n"
   stats = measure(expected: [ :complete, count ]) do

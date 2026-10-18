@@ -15,7 +15,9 @@ module Wireless
     # 错误响应须独占来源行；横幅正文不是设备命令诊断。
     def self.unsupported?(text)
       banner = CtxParser::Banner.new
-      text.split(/\r\n?|\n/).any? { |line| !banner.consume(line.strip) && UNSUPPORTED.match?(line) }
+      # 常见 LF 回显逐行读取，错误首行可立即返回，不预先分配整张行数组。
+      lines = text.include?("\r") ? text.split(/\r\n?|\n/) : text.each_line("\n")
+      lines.any? { |line| !banner.consume(line.strip) && UNSUPPORTED.match?(line) }
     end
 
     # 在字段清理之前检测终端残留，避免将编辑后的文本接受为事实。

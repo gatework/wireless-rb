@@ -3,19 +3,19 @@
 module Wireless
   module H3c
     # 维护实体身份、归属及认证类型，不解析 CLI 文本或管理来源游标。
-    class Configuration
+    class ConfigurationBuilder
       Scope = Data.define(:kind, :record, :path) do
         # 解析当前配置块内的设置。
         def settings = %i[ap_groups service_templates].include?(kind) ? record[:configuration] : record
 
-        # 解析已配置 AP 型号及其声明能力。
-        def model(name)
+        # 构建或复用 AP 型号作用域。
+        def build_model_scope(name)
           raise ArgumentError, "AP model outside group" unless kind == :ap_groups
           descend(:model, [ :model_profiles, name ], radios: {})
         end
 
-        # 在所属 AP 或型号作用域内解析 Radio 块。
-        def radio(identity)
+        # 在合法父级下构建或复用 Radio 作用域。
+        def build_radio_scope(identity)
           unless %i[access_points ap_groups model global_configuration virtual_ap_group].include?(kind)
             raise ArgumentError, "Invalid Radio owner"
           end
@@ -30,14 +30,14 @@ module Wireless
           descend(:radio, keys, service_templates: [])
         end
 
-        # 在声明的配置作用域内解析 AP 以太网设置。
-        def ethernet(name)
+        # 构建或复用 AP 以太网端口作用域。
+        def build_ethernet_scope(name)
           raise ArgumentError, "Invalid Ethernet owner" unless %i[access_points model].include?(kind)
           descend(:ethernet, [ :ethernet_ports, name ])
         end
 
-        # 汇总已解析记录，并报告未解决或不完整的来源状态。
-        def finish
+        # 计算模板认证类型并返回记录；来源完整性由解析器维护。
+        def finalize_record
           record[:authentication_type] = authentication_type if kind == :service_templates
           record
         end
@@ -84,7 +84,7 @@ module Wireless
       end
 
       # 使用实体集合作为身份索引，首条重复记录仅供部分结果保留。
-      def entity(kind, name, model: nil, type: nil)
+      def build_entity_scope(kind, name, model: nil, type: nil)
         collection = data.fetch(kind)
         duplicate = @entity_names[kind].key?(name)
         raise ArgumentError, "Duplicate wireless configuration identity" if duplicate
@@ -103,8 +103,8 @@ module Wireless
         Scope.new(kind: kind, record: record, path: [ kind, identity ])
       end
 
-      # 解析支持的控制器全局无线配置。
-      def global(kind = :global, identity: nil)
+      # 构建或复用控制器全局无线配置作用域。
+      def build_global_scope(kind = :global, identity: nil)
         record = data[:global_settings]
         path = [ :global_settings ]
         unless %i[global global_configuration].include?(kind)

@@ -2,6 +2,18 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
+## 0.3.0 (2026-10-18)
+
+- Name the internal H3C record builder `H3c::ConfigurationBuilder` (`wireless/h3c/configuration_builder`) and shared authentication field definitions `H3c::AuthenticationFields` (`wireless/h3c/authentication_fields`). Keep the public `Wireless::Configuration` entry point and `wireless/configuration` require path. Renamed internal constants and paths have no aliases.
+- Rename Collector injection keywords to `ap_session_factory:` and `ap_credentials:`; update host integrations accordingly.
+- Name internal operations for their actual behavior: build configuration scopes, mark unsupported subtrees, validate field blocks, parse table rows, capture AP LLDP, and restore the controller or close it.
+- Keep NeighborParser caller errors distinct from malformed device evidence and unsupported platform dimensions.
+- Validate observation timestamps as Time or nil during construction and value replacement.
+- Restrict recognized Radio controls and service-template security commands to their own configuration scopes; misplaced commands leave captures incomplete.
+- Centralize VLAN identity validation for H3C configuration/runtime and Huawei stations; reject VLAN 0 consistently.
+- Preserve safe failure diagnostics and skipped execution from injected AP captures without repeating adapter errors.
+- Scan LF command output incrementally for unsupported responses, avoiding a full line array and stopping at the first error.
+
 ## 0.2.0 (2026-10-17)
 
 - Route Huawei commands through Profile and standard Parser contracts, and validate caller arguments before reading output. Keep malformed device bodies as failed observations.

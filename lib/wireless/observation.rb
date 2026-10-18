@@ -12,6 +12,10 @@ module Wireless
       raise ArgumentError, "Wireless records must be hashes" unless records.is_a?(Array) && records.all? { |record| record.is_a?(Hash) }
       raise ArgumentError, "Unavailable wireless observation has records" if %i[failed unsupported not_requested].include?(status) && records.any?
 
+      unless [ started_at, completed_at ].all? { |time| time.nil? || time.is_a?(Time) }
+        raise ArgumentError, "Wireless observation timestamps must be Time values or nil"
+      end
+
       super(name: name, status: status, records: CtxParser::Immutable.copy(records),
         issues: CtxParser::Immutable.copy(issues), evidence: CtxParser::Immutable.copy(evidence),
         started_at: started_at&.dup&.freeze, completed_at: completed_at&.dup&.freeze)

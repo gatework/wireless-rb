@@ -69,11 +69,13 @@ end
 
 非法平台、型号、维度参数及非布尔 `complete` 抛出 `ArgumentError`；设备正文格式错误返回失败观测。
 
+`NeighborParser#parse` 对非法 AP 名称及非文本输入同样抛出 `ArgumentError`；平台不支持的维度返回 `unsupported`。`Observation` 时间戳只接受 `Time` 或 `nil`，通过 `with` 替换时同样校验。
+
 `Configuration.new.parse(text, complete: false)` 解析控制器配置。`RuntimeParser.new(model: nil).parse(name, text, platform: "h3c", complete: false)` 解析单个运行维度；`parse_many` 为同一命令的多个维度共享解析。`NeighborParser` 为邻居观察补充 AP 上下文。
 
 输入完整性由调用方确认。未知语法、身份重复、数量矛盾和截断输出保持部分或失败。配置中的最大发射功率不能当作当前测量功率；PSK、密码、认证 URL 不可进入快照。
 
-`Collector#collect(connector:, target:, platform:, model: nil, dimensions:, ap_connection: nil, ap_names: [])` 使用宿主注入的 connector，普通采集仅要求会话提供 `connected?` 和 `send_commands`。AP LLDP 通过 `Collector.new(ap_session: factory)` 显式注入；factory 接收 `controller:` 和按需解析的 `ap_connection` 关键字，返回提供 `read(access_point:)` 的对象。需要查询 AP 但未注入工厂时，仅 LLDP 返回 `ap_session_required`，不读取 AP 凭据，也不影响控制器清单。
+`Collector#collect(connector:, target:, platform:, model: nil, dimensions:, ap_credentials: nil, ap_names: [])` 使用宿主注入的 connector，普通采集仅要求会话提供 `connected?` 和 `send_commands`。AP LLDP 通过 `Collector.new(ap_session_factory: factory)` 显式注入；factory 接收 `controller:` 和按需解析的 `ap_credentials` 关键字，返回提供 `read(access_point:)` 的对象。需要查询 AP 但未注入工厂时，仅 LLDP 返回 `ap_session_required`，不读取 AP 凭据，也不影响控制器清单。
 
 内置 AP 登录适配器可选使用。宿主须自行声明 `gem "net-connector", "~> 0.11.1", require: false`，并显式加载和注入：
 
@@ -82,11 +84,11 @@ require "wireless"
 require "wireless/ap_session"
 
 collector = Wireless::Collector.new(
-  ap_session: ->(controller:, **credentials) { Wireless::ApSession.new(controller: controller, **credentials) }
+  ap_session_factory: ->(controller:, **credentials) { Wireless::ApSession.new(controller: controller, **credentials) }
 )
 ```
 
-适配器要求通过 `ap_connection` 显式提供 AP 密码，可选用户名；自定义适配器可自行管理凭据。`read` 返回包含 `result: CtxDriver::Capture`、可选 `error:` / `cleanup_error:` / `close_error:` 和 `skipped:` 的 Hash。控制器和 AP 凭据、会话生命周期归宿主或适配器管理，解析器不推断 AP console 或凭据。
+适配器要求通过 `ap_credentials` 显式提供 AP 密码，可选用户名；自定义适配器可自行管理凭据。`read` 返回包含 `result: CtxDriver::Capture`、可选 `error:` / `cleanup_error:` / `close_error:` 和 `skipped:` 的 Hash。控制器和 AP 凭据、会话生命周期归宿主或适配器管理，解析器不推断 AP console 或凭据。
 
 AP 接入复用已连接的控制器及其操作租约，不另建 AP 传输连接。登录、只读查询、确认返回及失败关闭都在同一租约中；控制器忙碌时不关闭或破坏其他操作。只有仍处于已确认的 AP 提示符时才发送 `quit`，取消继续传播，退出与关闭故障独立保留。空 AP 清单不解析凭据，也不创建适配器。
 
@@ -96,11 +98,13 @@ AP 接入复用已连接的控制器及其操作租约，不另建 AP 传输连�
 
 运行字段或同一配置声明块内的单值设置发生冲突时，移除歧义事实，相关来源保持不完整；同块后续声明不能恢复该值。独立的顺序配置块保留各自的来源快照。未知父级下的无线声明不能被当作空配置。观测名称必须为 Symbol，显示字符串只含元数据。空覆盖范围保持未知，新鲜度时间窗必须为有限非负数。
 
+Radio 信道、带宽、功率和开关，以及服务模板的 PSK、AKM、加密套件和安全 IE 设置必须位于对应配置视图。位置错误的命令保留为不支持的来源证据，不能在外层对象中生成事实；视图依据见 [H3C 命令参考](https://www.h3c.com/en/d_202004/1286221_294551_0.htm)。
+
 ## 领域术语
 
 H3C `Online time` 保存为 `online_seconds`，AP 的 `System uptime` 保存为 `uptime_seconds`，两者对应[不同的设备字段](https://www.h3c.com/cn/d_202606/2850182_30005_0.htm)。显式认证模式优先于域引用；组合和回退模式保留顺序，不归并为单一认证方式，依据 [H3C 认证命令参考](https://www.h3c.com/en/d_202106/1418918_294551_0.htm)。LLDP 的不透明机箱标识保留大小写，明确为 MAC 类型时才归一化。
 
-H3C 命令解析器使用 `H3c::Parser` 校验命令回显，使用 `H3c::RecordParser` 读取带字段标签的记录。`H3c::Authentication` 复用认证字段定义，`H3c::Document` 保留配置来源行；Huawei 使用 `Huawei::Profile` 和 `Huawei::Parsers` 命令解析器，遵循相同参数契约。
+H3C 命令解析器使用 `H3c::Parser` 校验命令回显，使用 `H3c::RecordParser` 读取带字段标签的记录。`H3c::AuthenticationFields` 复用认证字段定义，`H3c::Document` 保留配置来源行；Huawei 使用 `Huawei::Profile` 和 `Huawei::Parsers` 命令解析器，遵循相同参数契约。
 
 AP、射频、BSS 和关联客户端具有不同身份。测量转换方法明确返回单位：`Fields.duration_seconds`、`Fields.rates_mbps`、`Fields.channel_width_mhz`。`Fields.frequency_band` 需要无歧义的频段标签或频段专属 PHY 证据；仅有信道号或通用 `802.11ax` 标签时保持未知。参见 [Cisco 的 6 GHz 信道示例](https://www.cisco.com/c/en/us/support/docs/wireless/catalyst-9166-series-access-points/220526-configure-and-verify-wi-fi-6e-band-opera.html)。
 
@@ -123,7 +127,7 @@ bundle exec rake build
 
 使用声明的最低 Ruby 版本检查兼容性。方法用途统一使用简明中文注释；复杂实现还需说明业务规则、实现思路及关键分支。保持公开返回值与错误契约。真实回显和凭据不可进入示例、fixture、日志或发布包。
 
-运行 `bundle exec ruby -Ilib benchmark/tables.rb`，比较 500、2,000、5,000 条合成模板、绑定及 LLDP 续行的本地开销。每组核对解析结果，报告三次采样中最快的耗时和对象分配数；这些结果不代表设备或网络性能。
+运行 `bundle exec ruby -Ilib benchmark/tables.rb`，比较 500、2,000、5,000 条合成模板、绑定及 LLDP 续行，以及 100,000 行终端回显的完整扫描和首行报错开销。每组核对解析结果，报告三次采样中最快的耗时和对象分配数；这些结果不代表设备或网络性能。
 
 ## 发布
 

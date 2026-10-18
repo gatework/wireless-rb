@@ -5,6 +5,57 @@ require_relative "spec_helper"
 RSpec.describe "Wireless configuration integrity" do
   let(:parser) { Wireless::H3c::Parsers::DisplayCurrentConfiguration.new }
 
+  it "rejects Radio settings outside Radio views without certifying their source captures" do
+    [ "channel 36", "channel auto unlock", "channel band-width 80", "max-power 20", "radio enable", "radio disable" ].each do |setting|
+      source = "wlan service-template LAB\n #{setting}\nreturn\n"
+      result = parser.parse(source, complete: true)
+      expect(result.status).to eq(:partial)
+      expect(result.records.first[:service_templates].first[:configuration]).to eq(akm_modes: [], cipher_suites: [], security_ies: [])
+      expect(parser.cursor.state(1)).to eq(:unsupported)
+      expect(parser.cursor.captures_for([ :service_templates, 0 ]).first).not_to be_complete
+    end
+  end
+
+  it "rejects template security settings outside service template views" do
+    [ "preshared-key pass-phrase simple private-password", "akm mode psk", "cipher-suite ccmp", "security-ie rsn" ].each do |setting|
+      source = "wlan ap AP model TEST\n radio 1\n  #{setting}\nreturn\n"
+      result = parser.parse(source, complete: true)
+      expect(result.status).to eq(:partial)
+      expect(result.records.first.dig(:access_points, "AP", :radios, "1")).to eq(service_templates: [])
+      expect(parser.cursor.state(2)).to eq(:unsupported)
+      expect(parser.cursor.captures_for([ :access_points, "AP", :radios, "1" ]).first).not_to be_complete
+      expect(result.to_h.inspect).not_to include("private-password")
+    end
+  end
+
+  it "preserves Radio settings in AP, AP group model, and AP group global Radio views" do
+    [ [ "wlan ap AP model TEST\n radio 1\n", 2, [ :access_points, "AP", :radios, "1" ] ],
+      [ "wlan ap-group GROUP\n ap-model TEST\n  radio 1\n", 3, [ :ap_groups, 0, :model_profiles, "TEST", :radios, "1" ] ],
+      [ "wlan ap-group GROUP\n radio 5g\n", 2, [ :ap_groups, 0, :configuration, :band_defaults, "5g" ] ] ].each do |prefix, indent, path|
+      [ [ "channel 36", { channel: "36", channel_number: 36 } ],
+        [ "channel auto unlock", { channel: "auto", channel_number: nil, channel_unlocked: true } ],
+        [ "channel band-width 80", { channel_bandwidth: "80" } ],
+        [ "max-power 20", { max_power: 20 } ],
+        [ "radio enable", { enabled: true } ], [ "radio disable", { enabled: false } ] ].each do |setting, expected|
+        result = parser.parse(prefix + " " * indent + setting + "\nreturn\n", complete: true)
+        expect(result).to be_complete
+        expect(result.records.first.dig(*path)).to include(expected)
+        expect(parser.cursor.captures_for(path).first).to be_complete
+      end
+    end
+  end
+
+  it "preserves service template security facts without exposing the PSK" do
+    source = "wlan service-template LAB\n preshared-key pass-phrase simple private-password\n akm mode psk\n cipher-suite ccmp\n security-ie rsn\nreturn\n"
+    result = parser.parse(source, complete: true)
+    expect(result).to be_complete
+    template = result.records.first[:service_templates].first
+    expect(template[:authentication_type]).to eq("psk")
+    expect(template[:configuration]).to include(has_preshared_key: true, akm_modes: [ "psk" ], cipher_suites: [ "ccmp" ], security_ies: [ "rsn" ])
+    expect(parser.cursor.captures_for([ :service_templates, 0 ]).first).to be_complete
+    expect(result.to_h.inspect).not_to include("private-password")
+  end
+
   it "removes conflicting settings in one template and keeps their source captures incomplete" do
     source = "wlan service-template LAB\n ssid Secure\n ssid Open\n ssid Secure\n vlan 100\nreturn\n"
     result = parser.parse(source, complete: true)

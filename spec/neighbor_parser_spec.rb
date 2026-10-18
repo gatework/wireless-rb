@@ -18,4 +18,23 @@ RSpec.describe Wireless::NeighborParser do
     expect(described_class.new.parse(fixture, ap_name: "AP-LAB")).to be_partial
     expect(described_class.new.parse(fixture.sub("Port ID : GigabitEthernet1/0/24\n", ""), ap_name: "AP-LAB", complete: true).status).to eq(:failed)
   end
+
+  it "rejects caller mistakes before treating device output as failed evidence" do
+    parser = described_class.new
+    [ nil, "", "  ", :ap ].each do |name|
+      expect { parser.parse("No LLDP neighbors\n", ap_name: name, complete: true) }.to raise_error(ArgumentError)
+    end
+    expect { parser.parse(nil, ap_name: "AP-LAB") }.to raise_error(ArgumentError)
+    expect { parser.parse("No LLDP neighbors\n", ap_name: "AP-LAB", complete: "true") }.to raise_error(ArgumentError)
+    expect(parser.parse("\xff".b, ap_name: "AP-LAB", complete: true).status).to eq(:failed)
+  end
+
+  it "reports an unsupported platform dimension independently of caller validation" do
+    parser = described_class.new(platform: :huawei)
+    result = parser.parse("No LLDP neighbors\n", ap_name: "AP-LAB", complete: true)
+    expect(result.status).to eq(:unsupported)
+    expect(result.records).to be_empty
+    expect { parser.parse(nil, ap_name: "AP-LAB") }.to raise_error(ArgumentError)
+    expect { parser.parse("", ap_name: "AP-LAB", complete: "true") }.to raise_error(ArgumentError)
+  end
 end

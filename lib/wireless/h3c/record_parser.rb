@@ -34,7 +34,7 @@ module Wireless
           issues << { code: :invalid_identity } if invalid
           invalid
         end
-        Fields.result(records, issues: issues, complete: complete, total: record_count(text, self.class::COUNT, issues), identity: self.class::IDENTITY)
+        Fields.result(records, issues: issues, complete: complete, total: reported_record_total(text, self.class::COUNT, issues), identity: self.class::IDENTITY)
       end
 
       # 返回字段标签、原始值与来源行号，保留明确允许的续行。
@@ -59,7 +59,7 @@ module Wireless
       # 更新当前记录前，先应用字段专用转换。
       def assign_field(record, mapping, label, raw, issues, line, details:)
         if record && (field = mapping[label])
-          parse_field(issues, line) do
+          with_field_validation(issues, line) do
             # 优先使用运行带宽；80+80MHz 等歧义值保持原义，不截断为单个数值。
             if field == :channel_width
               label = "channel bandwidth" if label == "channel band-width"
@@ -90,9 +90,7 @@ module Wireless
         when :client_count, :online_seconds, :uptime_seconds
           %i[online_seconds uptime_seconds].include?(field) ? Fields.duration_seconds(raw) : Fields.integer(raw)
         when :vlan, :initial_vlan_id, :authorized_vlan_id
-          vlan = Fields.integer(raw, max: 4094)
-          raise ArgumentError, "Invalid wireless VLAN" if vlan && vlan.zero?
-          vlan
+          Fields.vlan_id(raw)
         when :channel then Fields.channel(raw)
         when :channel_width then Fields.channel_width_mhz(raw)
         when :band then Fields.frequency_band(raw)
@@ -106,12 +104,12 @@ module Wireless
       end
 
       # 解析非负计数，同时保留未知值。
-      def record_count(text, noun, issues)
+      def reported_record_total(text, noun, issues)
         reported_total(text, noun: noun, issues: issues)
       end
 
       # 隔离单个格式错误字段，同时保留无关记录数据。
-      def parse_field(issues, line)
+      def with_field_validation(issues, line)
         yield
       rescue ArgumentError, IPAddr::InvalidAddressError
         issues << { code: :invalid_field, line: line }

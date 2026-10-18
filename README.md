@@ -71,9 +71,13 @@ end
 
 Invalid platform/model/dimension arguments and non-boolean `complete` raise `ArgumentError`; malformed device text produces a failed observation. The caller must establish input completeness. Unknown syntax, duplicate identities, count mismatches, and truncated output remain partial or failed. A configured maximum transmit power is not a current measured transmit power. PSKs, passwords, and authentication URLs must not enter snapshots.
 
+`NeighborParser#parse` also rejects invalid AP names and non-text input with `ArgumentError`; unsupported platform dimensions remain `unsupported`. `Observation` timestamps accept `Time` or `nil`, including replacements through `with`.
+
 Conflicting runtime fields and singleton settings within one configuration block are excluded and keep their source evidence incomplete; later declarations in that block cannot restore the ambiguous value. Separate sequential configuration blocks retain their own source captures. Unknown nested wireless declarations cannot certify an empty configuration. Observation names must be symbols; display strings contain metadata only. An empty coverage scope is unknown, and freshness windows must be finite and nonnegative.
 
-`Collector#collect(connector:, target:, platform:, model: nil, dimensions:, ap_connection: nil, ap_names: [])` uses a host-supplied connector; ordinary collection only requires `connected?` and `send_commands` on its sessions. For AP LLDP, inject `Collector.new(ap_session: factory)`. The factory receives `controller:` plus lazily resolved `ap_connection` keywords and returns an object with `read(access_point:)`. When APs need querying but no factory was supplied, only LLDP reports `ap_session_required`; credentials are not read and controller observations remain available.
+Radio channel, bandwidth, transmit-power and enable/disable settings, plus template PSK, AKM, cipher and security-IE settings, must belong to their corresponding configuration views. A misplaced command remains unsupported source evidence and cannot create a fact in its enclosing object; see the [H3C command views](https://www.h3c.com/en/d_202004/1286221_294551_0.htm).
+
+`Collector#collect(connector:, target:, platform:, model: nil, dimensions:, ap_credentials: nil, ap_names: [])` uses a host-supplied connector; ordinary collection only requires `connected?` and `send_commands` on its sessions. For AP LLDP, inject `Collector.new(ap_session_factory: factory)`. The factory receives `controller:` plus lazily resolved `ap_credentials` keywords and returns an object with `read(access_point:)`. When APs need querying but no factory was supplied, only LLDP reports `ap_session_required`; credentials are not read and controller observations remain available.
 
 The included AP login adapter is optional. Declare `gem "net-connector", "~> 0.11.1", require: false` in the host application, then load and inject it explicitly:
 
@@ -82,11 +86,11 @@ require "wireless"
 require "wireless/ap_session"
 
 collector = Wireless::Collector.new(
-  ap_session: ->(controller:, **credentials) { Wireless::ApSession.new(controller: controller, **credentials) }
+  ap_session_factory: ->(controller:, **credentials) { Wireless::ApSession.new(controller: controller, **credentials) }
 )
 ```
 
-This adapter requires an AP password and optional username through `ap_connection`; custom adapters can own their credentials. `read` returns a hash containing `result: CtxDriver::Capture`, optional `error:` / `cleanup_error:` / `close_error:`, and `skipped:`. The host or adapter owns credentials and session lifecycle; parsers never infer AP console activation or credentials.
+This adapter requires an AP password and optional username through `ap_credentials`; custom adapters can own their credentials. `read` returns a hash containing `result: CtxDriver::Capture`, optional `error:` / `cleanup_error:` / `close_error:`, and `skipped:`. The host or adapter owns credentials and session lifecycle; parsers never infer AP console activation or credentials.
 
 AP access reuses the connected controller and its operation lease; it does not open a separate AP transport. Login, read-only queries, confirmed return, and any failure close share that lease. A busy controller is left untouched. The adapter sends `quit` only from the confirmed AP prompt, and preserves cancellation and independent cleanup failures. Empty AP inventories do not resolve credentials or construct adapters.
 
@@ -96,7 +100,7 @@ The lifecycle connector is a host adapter exposing `open { |session| }` (and `pl
 
 ## Domain vocabulary
 
-H3C command parsers share `H3c::Parser` for command-output validation and `H3c::RecordParser` for labeled records. `H3c::Authentication` supplies shared authentication fields; `H3c::Document` preserves configuration source lines. Huawei uses `Huawei::Profile` and command parsers under `Huawei::Parsers`, with the same parameter contract.
+H3C command parsers share `H3c::Parser` for command-output validation and `H3c::RecordParser` for labeled records. `H3c::AuthenticationFields` supplies shared authentication fields; `H3c::Document` preserves configuration source lines. Huawei uses `Huawei::Profile` and command parsers under `Huawei::Parsers`, with the same parameter contract.
 
 APs, radios, BSSs, and associated clients have distinct identities. H3C `Online time` is `online_seconds`; AP `System uptime` is `uptime_seconds`, as shown by the [distinct device fields](https://www.h3c.com/cn/d_202606/2850182_30005_0.htm). Explicit authentication modes take precedence over configured domain references, and combined or fallback modes retain their order instead of becoming a single authentication method; see the [H3C authentication reference](https://www.h3c.com/en/d_202106/1418918_294551_0.htm). Opaque LLDP chassis IDs preserve case, while an explicit MAC subtype is normalized. Measurement conversion names expose output units: `Fields.duration_seconds`, `Fields.rates_mbps`, and `Fields.channel_width_mhz`. `Fields.frequency_band` requires an unambiguous frequency-band label or band-specific PHY evidence. A channel number alone, or a generic `802.11ax` label, does not establish a band; channel numbers are not accepted as band evidence. See the [Cisco 6-GHz channel examples](https://www.cisco.com/c/en/us/support/docs/wireless/catalyst-9166-series-access-points/220526-configure-and-verify-wi-fi-6e-band-opera.html).
 
@@ -117,7 +121,7 @@ bundle exec rake build
 
 `bundle exec rake` runs RSpec, RuboCop, and the offline examples. Tests live in `spec/`, following the existing project's RSpec convention; fixtures use synthetic or sanitized evidence. Add regression cases for successful, incomplete, unsupported, and malformed inputs when extending a parser. Offline tests do not certify all device versions or replace live integration checks.
 
-Run `bundle exec ruby -Ilib benchmark/tables.rb` for synthetic 500, 2,000, and 5,000-entry template, binding, and LLDP continuation cases. Each case validates its result and reports the fastest of three local samples plus object allocations; it does not measure device or network performance.
+Run `bundle exec ruby -Ilib benchmark/tables.rb` for synthetic 500, 2,000, and 5,000-entry template, binding, and LLDP continuation cases, plus 100,000-line terminal full-scan and first-error cases. Each case validates its result and reports the fastest of three local samples plus object allocations; it does not measure device or network performance.
 
 Use the declared minimum Ruby version for compatibility checks. Document source methods and non-obvious business logic in concise Chinese, preserve public return/error contracts, and never add raw device captures or credentials to examples, fixtures, logs, or release archives.
 
