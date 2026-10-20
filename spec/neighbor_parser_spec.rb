@@ -29,6 +29,33 @@ RSpec.describe Wireless::NeighborParser do
     expect(parser.parse("\xff".b, ap_name: "AP-LAB", complete: true).status).to eq(:failed)
   end
 
+  it "accepts an explicit empty neighbor list inside a port scope" do
+    result = described_class.new.parse("LLDP neighbor-information of port 1[GE1]:\nNo neighbors\n",
+      ap_name: "AP-LAB", complete: true)
+    expect(result).to be_complete
+    expect(result.records).to be_empty
+  end
+
+  it "keeps an empty port separate from another port with neighbors" do
+    text = "LLDP neighbor-information of port 1[GE1]:\nNo LLDP neighbors\n" \
+      "LLDP neighbor-information of port 2[GE2]:\nLLDP neighbor index: 1\nChassis ID: switch\nPort ID: GE3\n"
+    result = described_class.new.parse(text, ap_name: "AP-LAB", complete: true)
+    expect(result).to be_complete
+    expect(result.records.size).to eq(1)
+    expect(result.records.first[:local_interface]).to eq("GE2")
+  end
+
+  it "rejects contradictory empty and populated evidence for the same port in either order" do
+    port = "LLDP neighbor-information of port 1[GE1]:\n"
+    neighbor = "LLDP neighbor index: 1\nChassis ID: switch\nPort ID: GE2\n"
+    [ port + neighbor + "No neighbors\n", port + "No neighbors\n" + neighbor ].each do |text|
+      result = described_class.new.parse(text, ap_name: "AP-LAB", complete: true)
+      expect(result).to be_partial
+      expect(result.records.size).to eq(1)
+      expect(result.issues).to include(include(code: :conflicting_neighbor_count))
+    end
+  end
+
   it "reports an unsupported platform dimension independently of caller validation" do
     parser = described_class.new(platform: :huawei)
     result = parser.parse("No LLDP neighbors\n", ap_name: "AP-LAB", complete: true)

@@ -3,7 +3,7 @@
 require_relative "spec_helper"
 
 RSpec.describe "Wireless compound configuration settings" do
-  let(:parser) { Wireless::Configuration.new }
+  let(:parser) { Wireless::Config.new }
 
   def radio(text)
     result = parser.parse("wlan ap AP model TEST\n radio 1\n#{text}return\n", complete: true)

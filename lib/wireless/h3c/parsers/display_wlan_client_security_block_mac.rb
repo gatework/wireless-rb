@@ -21,7 +21,7 @@ module Wireless
               issues << { code: :unrecognized_line, line: index + 1 }
             end
           end
-          total = reported_total(text, noun: "(?:blocked clients|clients)", issues: issues)
+          total = reported_total(text, noun: "(?:blocked clients|clients|entries)", issues: issues)
           total = 0 if /\ANo blocked clients\s*$/i.match?(text.strip)
           Fields.result(records, issues: issues, complete: complete, total: total, identity: [ :mac_address ])
         end

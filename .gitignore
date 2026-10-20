@@ -17,3 +17,10 @@
 /storage/
 /tmp/
 .DS_Store
+
+# CLI 现场配置和报告不打包或提交。
+/wireless.yml
+/bin/wireless.yml
+/wireless-reports/
+/bin/wireless-reports/
+.cache/

@@ -27,13 +27,15 @@ module Wireless
       end
 
       # 校验每条总数声明，不能用第一条匹配掩盖矛盾或损坏的尾行。
-      def reported_total(text, noun:, issues:, continuation_lines: nil)
+      def reported_total(text, noun:, issues:, continuation_lines: nil, auxiliary_nouns: nil)
         prefix = /\A(?:Total\b|Number of (?:#{noun})\b|Current BSS number\b)/i
         totals = []
         text.each_line("\n").with_index do |line, index|
           row = line.strip
           next if continuation_lines&.key?(index + 1)
           next unless prefix.match?(row)
+          # 辅助统计只接受命令明确声明的名称与合法计数，不能替代记录总数。
+          next if auxiliary_nouns && /\ATotal(?: number of)? (?:#{auxiliary_nouns})\s*:\s*\d+\s*\z/i.match?(row)
           if (match = /\A(?:Total(?: number of)?(?:\s+(?:#{noun}))?|Number of (?:#{noun})|Current BSS number)\s*:\s*(\d+)\s*\z/i.match(row))
             totals << match[1].to_i
           else

@@ -7,7 +7,7 @@ module Wireless
     # 按字段标签划分 H3C 详细记录，并共享字段转换与诊断。
     class RecordParser < Parser
       COMMON_FIELDS = { "ap name" => :ap_name, "ap id" => :ap_id, "radio id" => :radio_id,
-        "ssid" => :ssid, "bssid" => :bssid, "vlan id" => :vlan, "service vlan id" => :vlan }.freeze
+        "ssid" => :ssid, "bssid" => :bssid, "vlan id" => :vlan, "service vlan id" => :service_vlan }.freeze
       DETAILS = [].freeze
 
       private
@@ -89,7 +89,7 @@ module Wireless
         when :ap_id, :radio_id then Fields.integer(raw)&.to_s
         when :client_count, :online_seconds, :uptime_seconds
           %i[online_seconds uptime_seconds].include?(field) ? Fields.duration_seconds(raw) : Fields.integer(raw)
-        when :vlan, :initial_vlan_id, :authorized_vlan_id
+        when :vlan, :service_vlan, :initial_vlan_id, :authorized_vlan_id
           Fields.vlan_id(raw)
         when :channel then Fields.channel(raw)
         when :channel_width then Fields.channel_width_mhz(raw)

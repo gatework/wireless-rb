@@ -45,6 +45,8 @@ module Wireless
           end
         end
         issues << { code: :missing_header } unless header
+        # Huawei 表格以 Total 声明确认返回范围；已有记录不能代替缺失的结束证据。
+        issues << { code: :missing_total } unless total
         result = Fields.result(records, issues: issues, complete: complete, total: total, identity: [ name == :access_points ? :name : :client_mac ])
         result
       rescue ArgumentError, IPAddr::InvalidAddressError

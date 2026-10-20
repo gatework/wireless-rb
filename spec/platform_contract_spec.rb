@@ -10,7 +10,7 @@ RSpec.describe "Wireless platform contracts" do
       expect { parser.parse_many([ :clients, :clients ], "", platform: platform) }.to raise_error(ArgumentError)
     end
     expect { parser.parse(:clients, "", platform: :unknown) }.to raise_error(ArgumentError)
-    expect { Wireless::Configuration.new.parse("sysname LAB\n", complete: "true") }.to raise_error(ArgumentError)
+    expect { Wireless::Config.new.parse("sysname LAB\n", complete: "true") }.to raise_error(ArgumentError)
   end
 
   it "uses the Huawei command profile for complete and partial evidence" do
@@ -44,5 +44,27 @@ RSpec.describe "Wireless platform contracts" do
       result = Wireless::RuntimeParser.new.parse(:access_points, "\xff".b, platform: platform, complete: true)
       expect(result.status).to eq(:failed)
     end
+  end
+
+  it "defaults Huawei collection to its supported controller dimensions" do
+    session = double("Huawei session", connected?: true)
+    connector = double("Huawei connector", platform: :huawei)
+    allow(connector).to receive(:open).and_yield(session)
+    commands = []
+    allow(session).to receive(:send_commands) do |queries|
+      commands.concat(queries)
+      body = case queries.first
+      when "display ap all" then "ID MAC Name Group IP Type State STA Uptime\nTotal: 0\n"
+      when "display station all" then "STA MAC AP ID Ap name Rf/WLAN\nTotal: 0\n"
+      else ""
+      end
+      double("Receipt", output: body, success?: true, steps: [ Object.new ], value!: body)
+    end
+
+    result = Wireless::Collector.new.collect(connector: connector, target: { host: "192.0.2.1" }, platform: :huawei)
+
+    expect(result).to be_complete
+    expect(result.dimensions.keys).to contain_exactly(:access_points, :clients, :collection)
+    expect(commands).to eq([ "screen-length 0 temporary", "display ap all", "display station all" ])
   end
 end

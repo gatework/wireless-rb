@@ -220,7 +220,7 @@ RSpec.describe Wireless::H3c::Parsers::DisplayCurrentConfiguration do
           settings = source.start_with?("wlan") ? result.records.first[:service_templates].first[:configuration] : result.records.first[:global_settings]
           expect(settings[:mac_authentication_user_name_format]).to eq("fixed")
           expect(settings[:mac_authentication_has_password]).to eq(suffix.include?("password"))
-          expect([ result.to_h, parser.cursor.captures.map(&:data), Wireless::Configuration.new.parse(source, complete: true).to_h ].inspect).not_to include("SYNTHETIC-SECRET")
+          expect([ result.to_h, parser.cursor.captures.map(&:data), Wireless::Config.new.parse(source, complete: true).to_h ].inspect).not_to include("SYNTHETIC-SECRET")
           expect(parser.cursor.content).to eq(source)
         end
       end

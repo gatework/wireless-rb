@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "cases": [
+    {
+      "id": "huawei-ap-official-derived",
+      "file": "huawei_ap_all.txt",
+      "sha256": "ff083b21df328c805265fef6a80ca8769efdc5a8a2e6051c1bb90f8a38b23c79",
+      "command": "display ap all",
+      "platform": "huawei",
+      "model": "AC6605 example; firmware not stated",
+      "provenance": "vendor_example_derived",
+      "source": "https://info.support.huawei.com/network/ptmngsys/Web/tsrev_wlan/cn/content/wlan/11_edesk_ap_online_fail/edesk_ap_online_fail_edesk001.html",
+      "transformations": [
+        "Keep table columns, three row states, model types, durations and count from official example",
+        "Replace AP names, MAC and management IP identities; normalize table whitespace"
+      ],
+      "expected": {
+        "status": "complete",
+        "issues": [],
+        "records": [
+          {
+            "ap_id": "0",
+            "mac_address": "02:00:00:00:00:01",
+            "name": "AP-ONLINE-1",
+            "group_name": "default",
+            "management_ip": "192.0.2.1",
+            "model": "AP6010DN-AGN",
+            "operational_status": "online",
+            "client_count": 0,
+            "uptime_seconds": 193724
+          },
+          {
+            "ap_id": "1",
+            "mac_address": "02:00:00:00:00:02",
+            "name": "AP-OFFLINE",
+            "group_name": "default",
+            "management_ip": null,
+            "model": "AP7110DN-AGN",
+            "operational_status": "offline",
+            "client_count": 0,
+            "uptime_seconds": null
+          },
+          {
+            "ap_id": "2",
+            "mac_address": "02:00:00:00:00:03",
+            "name": "AP-ONLINE-2",
+            "group_name": "default",
+            "management_ip": "192.0.2.3",
+            "model": "AP7110SN-GN",
+            "operational_status": "online",
+            "client_count": 0,
+            "uptime_seconds": 193958
+          }
+        ]
+      }
+    }
+  ],
+  "inherited_fixtures": [
+    {
+      "file": "netstack/wireless_assets.txt",
+      "sha256": "5989942462192d840f360d2b8648b943482a20298a7b7d9affd4a23ecdc407cd",
+      "provenance": "historical_origin_unverified"
+    },
+    {
+      "file": "netstack/wireless_details.cfg",
+      "sha256": "d048ec81fe7439e9898c85e358e7ed23e1fb6e2c315a96f2025a404ae3d3955b",
+      "provenance": "historical_origin_unverified"
+    },
+    {
+      "file": "netstack/wireless_dot1x.txt",
+      "sha256": "09e754193e72b56dee23f91e9628e6a6aa2e45bf13b6b25f2b6b47fd35f83839",
+      "provenance": "historical_origin_unverified"
+    },
+    {
+      "file": "netstack/wireless_lldp.txt",
+      "sha256": "427c0be576642a01bde7ffa16dda875618e98db722dd9a8bac79b26039085523",
+      "provenance": "historical_origin_unverified"
+    },
+    {
+      "file": "wireless/ap_models.txt",
+      "sha256": "3c2036fce31d3b63eddbe9a06a6801d193b093a5ec190c1be1ecb153bb6a15a9",
+      "provenance": "historical_origin_unverified"
+    },
+    {
+      "file": "wireless/client_ip_conflicts.txt",
+      "sha256": "5a17479269c45e63d55d9aa0553cb98cbedb723786adcc2f1175df3e38e96a64",
+      "provenance": "historical_origin_unverified"
+    },
+    {
+      "file": "wireless/client_ip_conflicts_repeated.txt",
+      "sha256": "cbe09b91570580c24b5e09289e9ef33f182066a02af43b3aa822e5199ca53dcc",
+      "provenance": "historical_origin_unverified"
+    },
+    {
+      "file": "wireless/dot1x_changing_total.txt",
+      "sha256": "11d48c94fd1919e859b7630d982f40de330672d418288cb680ef21aa46423cc8",
+      "provenance": "historical_origin_unverified"
+    }
+  ]
+}

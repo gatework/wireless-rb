@@ -17,7 +17,7 @@ RSpec.describe "Standalone wireless command parsers" do
       end
       require "wireless"
       abort "Transport activated" if defined?(Net::Connector::Base) || $LOADED_FEATURES.any? { |path| path.end_with?("/net/connector.rb") }
-      parsed = Wireless::Configuration.new.parse("sysname WLC\nreturn\n", complete: true)
+      parsed = Wireless::Config.new.parse("sysname WLC\nreturn\n", complete: true)
       abort "Configuration unavailable" unless parsed.complete?
       abort "Collector unavailable" unless Wireless::Collector.new
     RUBY

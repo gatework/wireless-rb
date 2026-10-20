@@ -17,14 +17,14 @@ RSpec.describe "Wireless parser integrity" do
     expect(parser.parse(:blocked_clients, "0200-0000-0101 reason\nTotal: 1\nTotal: 2\n", complete: true)).not_to be_complete
   end
 
-  it "removes conflicting converted aliases permanently while retaining unrelated facts" do
-    text = "Total number of clients : 1\n#{client}VLAN ID : 10\nService VLAN ID : 20\nVLAN ID : 10\nSSID : Corp\n"
+  it "removes conflicting converted values permanently while retaining unrelated facts" do
+    text = "Total number of clients : 1\n#{client}VLAN ID : 10\nVLAN ID : 20\nVLAN ID : 10\nSSID : Corp\n"
     result = parser.parse(:clients, text, complete: true)
     expect(result.status).to eq(:partial)
     expect(result.records.first).to include(ssid: "Corp")
     expect(result.records.first).not_to have_key(:vlan)
     expect(result.issues).to include(include(code: :conflicting_field, line: 4))
-    same = "Total number of clients : 1\n#{client}VLAN ID : 010\nService VLAN ID : 10\n"
+    same = "Total number of clients : 1\n#{client}VLAN ID : 010\nVLAN ID : 10\n"
     expect(parser.parse(:clients, same, complete: true)).to be_complete
   end
 

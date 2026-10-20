@@ -4,8 +4,26 @@
 
 以纯 Ruby 解析无线控制器配置和运行观察。厂商命令解析器建模 AP、Radio、客户端和服务配置，采集事实与库存持久化分开。
 
+## 命令行入口
+
+新增 `wireless collect` / `wireless parse`，配置、初始化、筛选、并发、进度、私有逐设备报告及退出码与 VXLAN CLI 保持一致。
+
+```sh
+ruby bin/wireless.rb --help-all
+ruby bin/wireless.rb --plan
+ruby bin/wireless.rb
+ruby bin/wireless collect --help-all
+ruby bin/wireless collect --init --non-interactive
+ruby bin/wireless collect --plan
+ruby bin/wireless parse --dimension access_points --file aps.txt --complete
+```
+
+源码直接运行 `ruby bin/wireless.rb`，与 `wireless collect` 共用逐层配置发现：系统、用户配置目录、入口脚本目录、启动目录，显式配置最后叠加。值优先级为 CLI > 进程环境 > YAML > .env > 默认。初始化写用户配置目录或显式路径，报告默认写启动目录 `wireless-reports/`。支持 H3C 与 Huawei；AP LLDP 须显式启用并使用独立 AP 凭据。宿主配置及采集使用含 `Config` 的可选 `net-connector >= 0.14.2`，环境文件解析由该依赖提供；纯解析仍独立。详见[命令行使用说明](bin/README.md)。
+
+
 ## 能力
 
+- H3C BSS/客户端的 `VLAN ID` 保存为 `vlan`，`Service VLAN ID` 保存为 `service_vlan`；省电开关为 `power_save`，省电模式为 `power_save_mode`。已修正此前合并别名的行为，调用方应按字段语义读取。多行 `cipher-suite` / `security-ie` 累积启用成员，单值字段的冲突仍保持不完整。
 - H3C 配置、AP、Radio、BSS、客户端、AP 组、服务模板及认证观察。
 - Huawei 已支持的 AP/客户端运行格式；未支持维度明确标识。
 - 同一命令共享解析，每个结果视图独立保留完整性。
@@ -71,11 +89,13 @@ end
 
 `NeighborParser#parse` 对非法 AP 名称及非文本输入同样抛出 `ArgumentError`；平台不支持的维度返回 `unsupported`。`Observation` 时间戳只接受 `Time` 或 `nil`，通过 `with` 替换时同样校验。
 
-`Configuration.new.parse(text, complete: false)` 解析控制器配置。`RuntimeParser.new(model: nil).parse(name, text, platform: "h3c", complete: false)` 解析单个运行维度；`parse_many` 为同一命令的多个维度共享解析。`NeighborParser` 为邻居观察补充 AP 上下文。
+`Config.new.parse(text, complete: false)` 解析控制器配置。`RuntimeParser.new(model: nil).parse(name, text, platform: "h3c", complete: false)` 解析单个运行维度；`parse_many` 为同一命令的多个维度共享解析。`NeighborParser` 为邻居观察补充 AP 上下文。
 
 输入完整性由调用方确认。未知语法、身份重复、数量矛盾和截断输出保持部分或失败。配置中的最大发射功率不能当作当前测量功率；PSK、密码、认证 URL 不可进入快照。
 
-`Collector#collect(connector:, target:, platform:, model: nil, dimensions:, ap_credentials: nil, ap_names: [])` 使用宿主注入的 connector，普通采集仅要求会话提供 `connected?` 和 `send_commands`。AP LLDP 通过 `Collector.new(ap_session_factory: factory)` 显式注入；factory 接收 `controller:` 和按需解析的 `ap_credentials` 关键字，返回提供 `read(access_point:)` 的对象。需要查询 AP 但未注入工厂时，仅 LLDP 返回 `ap_session_required`，不读取 AP 凭据，也不影响控制器清单。
+省略 `dimensions` 时按平台 Profile 选择控制器维度；AP LLDP 仍须显式请求。显式选择平台未支持的维度时保留 `unsupported`。`Collector#collect(connector:, target:, platform:, model: nil, dimensions: nil, ap_credentials: nil, ap_names: [])` 使用宿主注入的 connector，普通采集仅要求会话提供 `connected?` 和 `send_commands`。AP LLDP 通过 `Collector.new(ap_session_factory: factory)` 显式注入；factory 接收 `controller:` 和按需解析的 `ap_credentials` 关键字，返回提供 `read(access_point:)` 的对象。需要查询 AP 但未注入工厂时，仅 LLDP 返回 `ap_session_required`，不读取 AP 凭据，也不影响控制器清单。
+
+采集器在打开连接前固定平台和型号 Profile，共享查询只解析一次。每次采集只接受一次会话回调；宿主重复回调时不重放控制器或 AP 查询，保留首次观测，并将采集故障标记为 `session_reentered`。
 
 内置 AP 登录适配器可选使用。宿主须自行声明 `gem "net-connector", ">= 0.13.0", require: false`，使用 `ctx_driver >= 0.2.2`，并显式加载和注入：
 
@@ -88,7 +108,7 @@ collector = Wireless::Collector.new(
 )
 ```
 
-适配器要求通过 `ap_credentials` 显式提供 AP 密码，可选用户名；自定义适配器可自行管理凭据。`read` 返回包含 `result: CtxDriver::Capture`、可选 `error:` / `cleanup_error:` / `close_error:` 和 `skipped:` 的 Hash。控制器和 AP 凭据、会话生命周期归宿主或适配器管理，解析器不推断 AP console 或凭据。
+适配器要求通过 `ap_credentials` 显式提供 AP 密码，可选用户名；自定义适配器可自行管理凭据。`read` 返回包含 `result: CtxDriver::Capture`、可选的 Symbol 错误代码 `error:` / `cleanup_error:` / `close_error:`（或 `nil`），以及可选布尔值 `skipped:` 的 Hash。格式错误的回执返回 `invalid_command_result`；非 Symbol 错误代码归一化为该代码，同时保留已取得的有效邻居事实。控制器和 AP 凭据、会话生命周期归宿主或适配器管理，解析器不推断 AP console 或凭据。
 
 AP 接入复用已连接的控制器及其操作租约，不另建 AP 传输连接。登录、只读查询、确认返回及失败关闭都在同一租约中；控制器忙碌时不关闭或破坏其他操作。只有仍处于已确认的 AP 提示符时才发送 `quit`，取消继续传播，退出与关闭故障独立保留。空 AP 清单不解析凭据，也不创建适配器。
 
@@ -96,7 +116,7 @@ AP 接入复用已连接的控制器及其操作租约，不另建 AP 传输连�
 
 生命周期 connector 是宿主适配器，提供 `open { |session| }`，VXLAN 和 Wireless 还要求 `platform`；原生 `Net::Connector::Base` 实例并不提供这一宿主生命周期协议。已连接的原生会话可传入 `CtxDriver::Reader` 或 `CtxChecker::Collector#collect_session`，不会隐式连接或重试。
 
-运行字段或同一配置声明块内的单值设置发生冲突时，移除歧义事实，相关来源保持不完整；同块后续声明不能恢复该值。独立的顺序配置块保留各自的来源快照。未知父级下的无线声明不能被当作空配置。观测名称必须为 Symbol，显示字符串只含元数据。空覆盖范围保持未知，新鲜度时间窗必须为有限非负数。
+运行字段或同一配置声明块内的单值设置发生冲突时，移除歧义事实，相关来源保持不完整；同块后续声明不能恢复该值。独立的顺序配置块保留各自的来源快照。未知父级下的无线声明不能被当作空配置。观测名称必须为 Symbol；观测、快照和投影的显示字符串（包括 `PP.pp`）只含元数据。空覆盖范围保持未知，新鲜度时间窗必须为有限非负数。
 
 Radio 信道、带宽、功率和开关，以及服务模板的 PSK、AKM、加密套件和安全 IE 设置必须位于对应配置视图。位置错误的命令保留为不支持的来源证据，不能在外层对象中生成事实；视图依据见 [H3C 命令参考](https://www.h3c.com/en/d_202004/1286221_294551_0.htm)。
 
@@ -140,3 +160,7 @@ CI 在 Linux、macOS 上执行测试、lint、示例、构建和隔离安装。`
 ## 许可证
 
 MIT，见 [LICENSE](LICENSE)。
+
+## 修复建议
+
+`wireless collect` 默认输出逐设备诊断，使用 `--scripts` 可选导出配置建议；`wireless review --batch DIR` 可离线补生成既有报告的候选配置、条件回退和只读验收命令。导出不会执行变更；独立 `apply --plan FILE` 必须在真实终端明确确认，配置漂移或失败即停止。详见[修复建议说明](docs/remediation.md)。

@@ -2,6 +2,38 @@
 
 Changes to the public contract are recorded here. Versions follow Semantic Versioning.
 
+## Unreleased
+
+- Rename the public configuration parser to `Wireless::Config` (`wireless/config`), updating CLI callers, examples, tests and documentation without compatibility aliases.
+
+- 与 net-connector 备份共用批次终端进度、阶段心跳、异常分类和结束摘要；JSON 独立输出，终端故障保留安全诊断且不重采。初始化并发继承公共 `NC_PARALLEL`，不再把公共值或默认 4 固化进 YAML。
+
+- CLI 配置统一使用 net-connector 0.14.2 的分层加载器，遵循命令行 > 进程环境 > YAML > `.env` > 默认值；支持公共配置复用、来源追踪及用户目录初始化。
+- 清单来源与缓存 CLI 参数先覆盖低优先级环境字段，再校验有效值，避免已被覆盖的空环境值阻断运行。
+
+- Make configuration script export opt-in with `--scripts`; add typed per-device plans and a TTY-only `apply` command with exact confirmation, fresh configuration guards, durable step checkpoints, no retry/automatic rollback, and configuration readback verification.
+
+- Generate evidence-backed, review-only remediation recommendations during collection and through the offline `review --batch` command, including prerequisites, blocked parameters, conditional rollback, verification commands and source hashes. Configuration drafts are fully commented; no device changes are executed.
+
+- Correct live H3C parsing: distinguish AP inventory totals from connection/license counters, accept blocked-client `Total entries`, and accumulate additive cipher suites/security IEs.
+- Keep `VLAN ID` in `vlan` and `Service VLAN ID` in `service_vlan`; keep `SM power save` in `power_save` and its mode in `power_save_mode`. These distinct fields no longer remove one another as conflicting aliases. Consumers using the former aliases must select the appropriate field.
+
+- Require Huawei table totals and evidence for every announced LLDP port; resolve connector compatibility through Registry aliases.
+- Publish incomplete summary checkpoints before finalization; retain safe checkpoints, recover committed failures/cancellation, invalidate stale success on repeated finish, and report unconfirmed recovery without replaying device queries.
+- Add traceable evidence specimens, independent literal expectations, private saved-capture replay and isolated targeted mutation verification tools.
+
+- Centralize static and discovered device validation before public configuration output, reject false filter lists, and isolate state when a CLI runner is reused.
+- Index completed hosts once when building pending-target summaries and document safe report publication states.
+- Derive supported platforms and dimensions from Profile declarations; default controller collection to the selected platform while retaining legacy constants.
+- Validate LLDP zero-neighbor declarations within their local port scope, preserving mixed-port facts and reporting contradictory counts.
+
+- Add direct `bin/wireless.rb` execution with fixed project paths, embedded Netdisco/inventory settings, common environment defaults and inventory cache flags.
+
+- Add the `wireless collect` / `wireless parse` CLI following VXLAN configuration, preview, concurrency, reporting and exit-code conventions.
+- Support H3C/Huawei inventories and explicit AP LLDP using separate environment credentials; keep transport and dotenv optional.
+- Package the executable, private initialization templates and CLI guide, and verify the installed entry point outside the checkout.
+- Mark requested observations failed when a connector never yields a session instead of reporting an empty successful collection.
+
 ## 0.3.1 (2026-10-18)
 
 - Clear Bundler bootstrap variables when verifying packages in an isolated gem installation, including calls made through bundle exec.

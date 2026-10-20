@@ -5,7 +5,7 @@ require_relative "observation"
 
 module Wireless
   # 将平台配置结果封装为领域观测。
-  class Configuration
+  class Config
     # 按当前平台和型号选择无线配置策略。
     def initialize(platform: :h3c, model: nil)
       @profile = ParserRegistry.fetch(platform, model: model)
