@@ -2,7 +2,6 @@
 
 require_relative "parser_registry"
 require "ctx_driver"
-require_relative "runtime_parser"
 require_relative "snapshot"
 require_relative "neighbor_parser"
 
@@ -20,13 +19,16 @@ module Wireless
     end
 
     # 通过调用方持有的连接器顺序采集请求维度。
-    def collect(connector:, target:, platform:, model: nil, dimensions: DEFAULT_DIMENSIONS, ap_credentials: nil, ap_names: [])
+    def collect(connector:, target:, platform:, model: nil, dimensions: nil, ap_credentials: nil, ap_names: [])
       platform = platform.to_s.dup.freeze
       model = model.dup.freeze if model.is_a?(String)
       raise ArgumentError, "Target must be a hash" unless target.is_a?(Hash)
 
+      profile = ParserRegistry.fetch(platform, model: model)
+      dimensions = profile.commands.keys - [ :lldp ] if dimensions.nil?
+
       unless dimensions.is_a?(Array) && dimensions.any? && dimensions.uniq == dimensions &&
-          (dimensions - (DEFAULT_DIMENSIONS + [ :lldp ])).empty? && ap_names.is_a?(Array) &&
+          (dimensions - SUPPORTED_DIMENSIONS).empty? && ap_names.is_a?(Array) &&
           ap_names.all? { |name| name.is_a?(String) && !name.strip.empty? && !/[\x00-\x1f\x7f]/.match?(name) }
         raise ArgumentError, "Invalid wireless dimensions or AP selection"
       end
@@ -37,18 +39,23 @@ module Wireless
       # LLDP 需要 AP 清单提供身份；组和服务模板需要配置证据补充关联关系。
       requested |= [ :access_points ] if requested.include?(:lldp)
       requested |= [ :configuration ] if (requested & %i[ap_groups service_templates]).any?
-      profile = ParserRegistry.fetch(platform, model: model)
       commands = profile.commands.except(:lldp)
       observations = requested.reject { |name| commands.key?(name) || (name == :lldp && profile.commands.key?(:lldp)) }
         .to_h { |name| [ name, unavailable_observation(name, :unsupported, :unsupported_platform_dimension) ] }
       queries = profile.queries(requested & commands.keys)
-      actual = connector.platform.to_s
-      unless actual == platform || ([ actual, platform ] - %w[h3c h3c_wireless]).empty?
+      unless compatible_platform?(connector.platform, profile, model)
         raise ArgumentError, "Wireless platform differs from the device connector"
       end
       stage = :connect
+      session_started = false
       begin
         connector.open do |session|
+          # 宿主重复回调不能重放查询或覆盖首次事实。
+          if session_started
+            observations[:collection] = unavailable_observation(:collection, :failed, :session_reentered)
+            next
+          end
+          session_started = true
           reader = CtxDriver::Reader.new(session: session, clock: @clock)
           stage = :prepare
           preparation = reader.read(profile.preparation_command)
@@ -59,7 +66,7 @@ module Wireless
               next
             end
             stage = :collect
-            observations.merge!(collect_command(reader, command, names, platform, model: model))
+            observations.merge!(collect_command(reader, command, names, profile))
           end
           if requested.include?(:lldp) && profile.commands.key?(:lldp)
             unavailable_code = error || reader.failure&.fetch(:code)
@@ -78,6 +85,8 @@ module Wireless
         requested.each { |name| observations[name] ||= unavailable_observation(name, :failed, code, skipped: true, stage: stage) }
         observations[:collection] = unavailable_observation(:collection, :failed, stage == :close ? :session_close_failed : code)
       end
+      # 连接器未交付会话也不能把空观测视为完整采集。
+      requested.each { |name| observations[name] ||= unavailable_observation(name, :failed, :session_not_opened, skipped: true) }
       status = observations.values.all?(&:complete?) ? :complete : observations.values.any?(&:available?) ? :partial : :failed
       observations[:collection] ||= Observation.new(name: :collection, status: status, completed_at: @clock.call)
       Snapshot.new(target: target, dimensions: observations, observed_at: @clock.call)
@@ -85,16 +94,24 @@ module Wireless
 
     private
 
+    # 连接器与请求通过同一 Registry 解析别名；未知平台沿用明确的不匹配错误。
+    def compatible_platform?(platform, profile, model)
+      ParserRegistry.fetch(platform, model: model).class == profile.class
+    rescue ArgumentError
+      false
+    end
+
     # 单条命令负责自身解析失败；无关查询保留已完成事实。
-    def collect_command(reader, command, names, platform, model:)
+    def collect_command(reader, command, names, profile)
       capture = reader.read(command)
       metadata = { started_at: capture.started_at, completed_at: capture.completed_at, evidence: capture.evidence }
       unless capture.success?
         return failed_observations(names, capture.failure, command: command, skipped: capture.skipped?, **metadata)
       end
       begin
-        RuntimeParser.new(model: model).parse_many(names, capture.body, platform: platform, complete: true)
-          .transform_values { |observation| observation.with(**metadata) }
+        profile.parse_many(names, capture.body, complete: true, command: command).to_h do |name, result|
+          [ name, Observation.new(name: name, **result.to_h, **metadata) ]
+        end
       rescue StandardError => error
         details = CtxDriver::Failure.details(error, fallback: :command_processing_failed, stage: :parse)
         failed_observations(names, details, command: command, **metadata)
@@ -148,10 +165,13 @@ module Wireless
       source = { kind: :ap_lldp_result, ap_name: ap[:name], command: H3c::Profile::COMMANDS.fetch(:lldp),
         attempted: true, status: :failed, neighbor_count: 0 }
       outcome = ap_session.read(access_point: ap)
-      result = outcome[:result]
       stage = :response
+      unless outcome.is_a?(Hash) && (!outcome.key?(:skipped) || [ true, false ].include?(outcome[:skipped]))
+        raise TypeError, "AP outcome must be a hash with a boolean skipped flag"
+      end
+      result = outcome[:result]
       source[:attempted] = !outcome[:skipped]
-      if result
+      unless result.nil?
         unless result.is_a?(CtxDriver::Capture) && result.command == source[:command] && !(outcome[:skipped] && result.success?)
           raise TypeError, "AP capture must match the requested LLDP command"
         end
@@ -159,17 +179,22 @@ module Wireless
         source = (result.evidence.first || {}).merge(source)
         source[:attempted] = false if result.skipped?
       end
+      # 适配器错误只接受稳定代码；非法字段不泄露正文，也不丢弃已取得的邻居事实。
+      failure_codes = %i[error cleanup_error close_error].filter_map do |key|
+        code = outcome[key]
+        next if code.nil?
+        code.is_a?(Symbol) ? code : :invalid_command_result
+      end.uniq
       stage = :parse
       parsed = result&.success? ? NeighborParser.new(model: ap[:model]).parse(result.body, ap_name: ap[:name], complete: true) : nil
       issues = parsed ? parsed.issues.map { |issue| issue.merge(ap_name: ap[:name]) } : []
       issues << safe_ap_failure_details(result.failure).merge(ap_name: ap[:name]) if result && !result.success?
-      %i[error cleanup_error close_error].each do |key|
-        code = outcome[key]
-        issues << { code: code, ap_name: ap[:name] } if code && issues.none? { |issue| issue[:code] == code }
+      failure_codes.each do |code|
+        issues << { code: code, ap_name: ap[:name] } if issues.none? { |issue| issue[:code] == code }
       end
       issues << { code: :ap_collection_failed, ap_name: ap[:name] } if !parsed && issues.empty?
       source.merge!(
-        status: outcome[:error] || outcome[:cleanup_error] || outcome[:close_error] ? :failed : parsed&.status || :failed,
+        status: failure_codes.any? ? :failed : parsed&.status || :failed,
         neighbor_count: parsed&.records&.size || 0)
       { records: parsed&.records || [], issues: issues, evidence: source }
     rescue StandardError => error

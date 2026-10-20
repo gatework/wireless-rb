@@ -1,4 +1,27 @@
-> 本文保留模块从 Motor 提取前的领域设计、覆盖范围、限制与验证记录，供兼容迁移和故障分析使用。
+# 独立 Wireless 的职责边界
+
+当前 gem 的业务链路为 `CLI Options → Collect → Collector → Profile/Parser → Observation/Snapshot → Review/Recommendations → Report`。核心负责无线事实与证据；宿主负责设备清单、凭据、并发、输出和持久化。
+
+| 对象 | 职责 |
+| --- | --- |
+| `ParserRegistry` / 平台 `Profile` | 选择平台及型号策略，声明共享命令与对应解析器 |
+| `Collector` | 固定一次请求和策略，拥有一次控制器采集流程，按命令顺序读取 |
+| `ApSession` | 显式 AP 中转会话、提示符确认与退出恢复，独立校验回执 |
+| `Observation` / `Snapshot` | 不可变事实、完整性与来源；默认调试展示只含元数据 |
+| `Projection` | 提供宿主可用的投影状态，不执行数据库写入 |
+| CLI `Options` / `Collect` / `Report` | 有效配置、设备批次及私有报告发布 |
+
+子职责的目录与常量对应：`cli/review/report.rb` 定义 `CLI::Review::Report`，`cli/connector.rb` 定义 `CLI::Connector`。审查模块编排业务产物，`CLI::Report` 拥有批次目录与原子发布；采集连接适配器拥有控制器会话。测试目录跟随实现目录组织。
+
+同一命令的多个维度使用一次解析，Collector 复用请求开始时选定的 Profile。连接器重复 yield 不重放查询、不覆盖首次事实；单台控制器内 AP 邻居采集保持顺序，独立控制器可以并发。AP 读取失败与退出失败分别保留为安全代码，其他已确认记录仍保留。
+
+CLI 与配置备份、VXLAN 共用 `Net::Connector::Config`、`Collect::Progress`、`Parallel::Pool` 和 `Resources`。资源预检按实际活跃设备数计算，失败发生在创建报告和连接设备之前；取消必须先回收线程再完成摘要。公共连接器仅由宿主按需加载，纯解析不读取环境、不创建连接、不持久化事实。报告保存与采集完整性分别记录，保存或显示故障不能变成成功。
+
+验证入口为 `bundle exec rake`，包含解析、控制器/AP 生命周期、CLI、报告故障与离线示例。基准与替身会话只能证明本地处理和控制流程；实机平台与版本需另行验证。安装、配置及命令详见 [README-zh.md](../README-zh.md) 和 [CLI 说明](../bin/README.md)。
+
+## 历史宿主集成
+
+> 以下保留模块从 Motor 提取前的领域设计、覆盖范围、限制与验证记录，供迁移和故障分析使用。
 > 当前独立 gem 的安装、依赖、开发与发布入口以 [README-zh.md](../README-zh.md) 为准。
 > 涉及 `Motor::*`、`Sync`、`Baseline::Check`、数据库、Rails、Rake 运维任务及私有实机证据的内容均属于 Motor 宿主集成，不随 gem 提供；历史验证记录不代表当前用户设备已经验证。
 
@@ -47,7 +70,7 @@ result.projection.dimensions # 各库存维度的 applied/deferred 和安全诊�
   ap_credentials: { password: ap_password })
 
 # 离线解析不建立会话、不写数据库。
-::Wireless::Configuration.new.parse(configuration_text, complete: true)
+::Wireless::Config.new.parse(configuration_text, complete: true)
 ::Wireless::RuntimeParser.new.parse(:clients, client_output, platform: "h3c", complete: true)
 ```
 

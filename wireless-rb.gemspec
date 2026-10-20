@@ -20,11 +20,13 @@ Gem::Specification.new do |spec|
     "rubygems_mfa_required" => "true"
   }
   # 显式限定打包文件，排除设备回显、凭据、测试夹具和构建产物。
-  spec.files = Dir.chdir(__dir__) { Dir["lib/**/*.rb", "examples/**/*.rb", "docs/**/*.md", "README*.md", "CHANGELOG.md", "LICENSE"].sort }
+  spec.files = Dir.chdir(__dir__) { Dir["lib/**/*.rb", "examples/**/*.rb", "lib/wireless/cli/templates/*", "bin/wireless", "bin/wireless.rb", "bin/README.md", "docs/**/*.md", "README*.md", "CHANGELOG.md", "LICENSE"].sort }
   spec.require_paths = [ "lib" ]
+  spec.bindir = "bin"
+  spec.executables = [ "wireless" ]
 
   spec.add_dependency "ctx_parser"
-  spec.add_dependency "ctx_driver"
+  spec.add_dependency "ctx_driver", ">= 0.2.4"
   spec.add_dependency "date"
-  spec.add_dependency "time"
+  %w[time json optparse yaml fileutils tempfile ipaddr].each { |name| spec.add_dependency name }
 end

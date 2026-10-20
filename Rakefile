@@ -11,7 +11,10 @@ RuboCop::RakeTask.new(:lint)
 
 desc "Run offline examples with the installed dependencies"
 task :examples do
-  Dir["examples/**/*.rb"].sort.each { |path| ruby "-Ilib", path }
+  ruby "-Ilib", "examples/offline.rb"
+  ruby "-Ilib", "bin/wireless", "--help"
+  ruby "-Ilib", "bin/wireless.rb", "--help"
+  %w[collect parse].each { |name| ruby "-Ilib", "bin/wireless", name, "--help" }
 end
 
 task default: [ :spec, :lint, :examples ]

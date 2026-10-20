@@ -1,0 +1,30 @@
+{
+  "runtime": "Ruby 4.0.7",
+  "suite": {
+    "examples": 250,
+    "failures": 0,
+    "rubocop_files": 82,
+    "rubocop_offenses": 0
+  },
+  "mutation": {
+    "policy": "RSpec assertion failures required; unexpected failures rejected",
+    "detected": 5,
+    "total": 5,
+    "non_assertion_controls_rejected": 1
+  },
+  "replay": {
+    "saved_captures": 156,
+    "changed_results": 0,
+    "framing": "exact command plus whitespace/control-free prompt",
+    "raw_inputs_committed": false
+  },
+  "package": {
+    "isolated_install": "passed",
+    "source_independent_load": "passed",
+    "version": "0.3.1"
+  },
+  "limits": [
+    "Saved captures are offline evidence; no new live device collection",
+    "Total storage refusal can prevent invalidating stale summaries; preserve nonzero exit code and recovery-unconfirmed diagnostics"
+  ]
+}

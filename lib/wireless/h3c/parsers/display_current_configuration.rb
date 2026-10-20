@@ -227,7 +227,8 @@ module Wireless
           when /\A(cipher-suite|security-ie) (.+)\z/
             return false unless kind == :service_templates
             key = words.first == "cipher-suite" ? :cipher_suites : :security_ies
-            assign_setting(record, key, words.drop(1).map(&:downcase), block)
+            # 每行启用一组可并存的算法或 IE；不同成员不属于单值冲突。
+            record[key] |= words.drop(1).map(&:downcase)
           when /\Aclient-security authentication-mode (.+)\z/
             mode = Regexp.last_match(1).downcase
             unless %w[dot1x mac mac-and-dot1x dot1x-then-mac mac-then-dot1x oui-then-dot1x].include?(mode)

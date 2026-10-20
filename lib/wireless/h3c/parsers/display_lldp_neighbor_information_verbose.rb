@@ -22,6 +22,7 @@ module Wireless
           records, issues = [], []
           current = nil
           local = nil
+          ports, empty_ports = {}, {}
           description_indent = nil
           description = description_line = nil
           store_description = lambda do
@@ -60,10 +61,13 @@ module Wireless
             if (match = /\ALLDP neighbor-information of port \d+\[(.+?)\]\s*:?\z/i.match(row))
               flush.call
               local = match[1]
+              ports[local] = true
             elsif /\ALLDP neighbor index\s*:/i.match?(row)
               flush.call
               current = { local_interface: local }
-            elsif /\A(?:LLDP agent\s+[^:]+:|No (?:LLDP )?neighbors|(?:Total|Number of neighbors).*:\s*\d+)\s*\z/i.match?(row)
+            elsif /\ANo (?:LLDP )?neighbors\s*\z/i.match?(row)
+              empty_ports[local] ||= index + 1
+            elsif /\A(?:LLDP agent\s+[^:]+:|(?:Total|Number of neighbors).*:\s*\d+)\s*\z/i.match?(row)
               next
             elsif (match = /\A([^:]+):\s*(.*?)\z/.match(row))
               label, raw = match.captures
@@ -96,8 +100,21 @@ module Wireless
           end
           store_description.call
           flush.call
+          populated_ports = records.to_h { |record| [ record[:local_interface], true ] }
+          # 每个已宣布端口都须有邻居或明确空声明，其他端口的记录不能证明它已完整返回。
+          ports.each_key do |port|
+            unless populated_ports.key?(port) || empty_ports.key?(port)
+              issues << { code: :missing_port_evidence, local_interface: port }
+            end
+          end
+          empty_ports.each do |port, line|
+            if port.nil? ? records.any? : populated_ports.key?(port)
+              issues << { code: :conflicting_neighbor_count, line: line }
+            end
+          end
           total = reported_total(text, noun: "(?:LLDP )?neighbors", issues: issues, continuation_lines: continuation_lines)
-          total ||= 0 if /\ANo (?:LLDP )?neighbors\s*$/i.match?(text.strip)
+          # 端口级空清单不覆盖其他端口；仅所有已声明端口都有零邻居证据时确认空结果。
+          total ||= 0 if records.empty? && empty_ports.any? && ports.keys.all? { |port| empty_ports.key?(port) }
           Fields.result(records, issues: issues, complete: complete, total: total,
             identity: %i[local_interface remote_chassis_id remote_interface])
         end

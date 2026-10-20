@@ -3,7 +3,7 @@
 require_relative "spec_helper"
 require "json"
 
-RSpec.describe Wireless::Configuration do
+RSpec.describe Wireless::Config do
   let(:fixture) { File.read(File.expand_path("fixtures/netstack/wireless_details.cfg", __dir__)) }
 
   it "extracts existing group/template fields and never retains a configured PSK" do

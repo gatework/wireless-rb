@@ -16,5 +16,7 @@ module Wireless
     # 展示应用范围，不在日志字符串中序列化应用详情。
     def inspect = "#<#{self.class.name} dimensions=#{dimensions.size}>"
     alias to_s inspect
+    # PP 默认展开 Data 成员，显式沿用脱敏展示。
+    def pretty_print(printer) = printer.text(inspect)
   end
 end

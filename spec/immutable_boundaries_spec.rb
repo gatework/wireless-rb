@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "spec_helper"
+require "pp"
 
 RSpec.describe "Immutable facts and evidence" do
   [ Wireless::Observation ].each do |type|
@@ -107,6 +108,7 @@ RSpec.describe "Immutable facts and evidence" do
       expect(value.inspect).not_to include("PRIVATE_")
       expect(value.to_s).to eq(value.inspect)
       expect("#{value}").not_to include("PRIVATE_")
+      expect(PP.pp(value, +"").strip).to eq(value.inspect)
     end
   end
 end

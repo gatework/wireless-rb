@@ -2,12 +2,12 @@
 
 require "ctx_parser/immutable"
 require_relative "observation"
+require_relative "parser_registry"
 
 module Wireless
   # 携带调用方提供的设备身份，不引入独立资产模型。
   Snapshot = Data.define(:target, :dimensions, :observed_at) do
-    DIMENSIONS = %i[access_points radios bsses clients configuration ap_groups service_templates
-      dot1x_connections mab_connections blocked_clients client_ip_conflicts ap_models lldp collection].freeze
+    DIMENSIONS = (SUPPORTED_DIMENSIONS + [ :collection ]).freeze
 
     # 冻结设备身份、观测结果与采样时间。
     def initialize(target:, dimensions:, observed_at: Time.now.utc)
@@ -34,5 +34,7 @@ module Wireless
     # 展示对象身份与状态，避免泄露原始回显或凭据。
     def inspect = "#<#{self.class.name} complete=#{complete?}>"
     alias to_s inspect
+    # PP 默认展开 Data 成员，显式沿用脱敏展示。
+    def pretty_print(printer) = printer.text(inspect)
   end
 end

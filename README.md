@@ -4,6 +4,23 @@
 
 Wireless controller configuration and runtime observations in pure Ruby. Vendor command parsers model access points, radios, clients, and service configuration while keeping observations separate from inventory persistence.
 
+## Command line
+
+Install the `wireless-rb` gem to use `wireless collect` and `wireless parse`, or run the source entry point:
+
+```sh
+ruby bin/wireless.rb --help-all
+ruby bin/wireless.rb --plan
+ruby bin/wireless.rb
+ruby bin/wireless collect --help-all
+ruby bin/wireless collect --init --non-interactive
+ruby bin/wireless collect --plan
+ruby bin/wireless parse --dimension access_points --file aps.txt --complete
+```
+
+The CLI follows VXLAN conventions for layered configuration, inventory filtering, concurrency, progress, private per-device reports and exit codes. Collection supports H3C and Huawei; AP LLDP is explicit and uses separate AP credentials. Host configuration and collection require optional `net-connector >= 0.16.0` with `Config`; environment-file parsing is provided by that dependency. Parser installation stays independent of transport. Both `wireless collect` and `ruby bin/wireless.rb` discover system, user, script-directory and invocation-directory files, then overlay explicit files. Values follow CLI > process environment > YAML > .env > defaults. Initialization writes to the user configuration directory or explicit paths; reports default to `wireless-reports/` in the invocation directory. See the [CLI guide](bin/README.md).
+
+
 ## Features
 
 - H3C configuration, access points, radios, BSSs, clients, groups, service templates, and authentication observations.
@@ -67,17 +84,19 @@ end
 
 ## Public contract and limits
 
-`Configuration.new.parse(text, complete: false)` parses controller configuration. `RuntimeParser.new(model: nil).parse(name, text, platform: "h3c", complete: false)` parses one runtime dimension; `parse_many` shares parsing for dimensions from the same command. `NeighborParser` supplies the AP context to neighbor observations.
+`Config.new.parse(text, complete: false)` parses controller configuration. `RuntimeParser.new(model: nil).parse(name, text, platform: "h3c", complete: false)` parses one runtime dimension; `parse_many` shares parsing for dimensions from the same command. `NeighborParser` supplies the AP context to neighbor observations.
 
 Invalid platform/model/dimension arguments and non-boolean `complete` raise `ArgumentError`; malformed device text produces a failed observation. The caller must establish input completeness. Unknown syntax, duplicate identities, count mismatches, and truncated output remain partial or failed. A configured maximum transmit power is not a current measured transmit power. PSKs, passwords, and authentication URLs must not enter snapshots.
 
 `NeighborParser#parse` also rejects invalid AP names and non-text input with `ArgumentError`; unsupported platform dimensions remain `unsupported`. `Observation` timestamps accept `Time` or `nil`, including replacements through `with`.
 
-Conflicting runtime fields and singleton settings within one configuration block are excluded and keep their source evidence incomplete; later declarations in that block cannot restore the ambiguous value. Separate sequential configuration blocks retain their own source captures. Unknown nested wireless declarations cannot certify an empty configuration. Observation names must be symbols; display strings contain metadata only. An empty coverage scope is unknown, and freshness windows must be finite and nonnegative.
+Conflicting runtime fields and singleton settings within one configuration block are excluded and keep their source evidence incomplete; later declarations in that block cannot restore the ambiguous value. Separate sequential configuration blocks retain their own source captures. Unknown nested wireless declarations cannot certify an empty configuration. Observation names must be symbols; display strings, including `PP.pp` for observations, snapshots and projections, contain metadata only. An empty coverage scope is unknown, and freshness windows must be finite and nonnegative.
 
 Radio channel, bandwidth, transmit-power and enable/disable settings, plus template PSK, AKM, cipher and security-IE settings, must belong to their corresponding configuration views. A misplaced command remains unsupported source evidence and cannot create a fact in its enclosing object; see the [H3C command views](https://www.h3c.com/en/d_202004/1286221_294551_0.htm).
 
-`Collector#collect(connector:, target:, platform:, model: nil, dimensions:, ap_credentials: nil, ap_names: [])` uses a host-supplied connector; ordinary collection only requires `connected?` and `send_commands` on its sessions. For AP LLDP, inject `Collector.new(ap_session_factory: factory)`. The factory receives `controller:` plus lazily resolved `ap_credentials` keywords and returns an object with `read(access_point:)`. When APs need querying but no factory was supplied, only LLDP reports `ap_session_required`; credentials are not read and controller observations remain available.
+Omitting `dimensions` selects the platform profile’s controller commands; AP LLDP remains explicit. Explicitly selected unsupported dimensions retain `unsupported`. `Collector#collect(connector:, target:, platform:, model: nil, dimensions: nil, ap_credentials: nil, ap_names: [])` uses a host-supplied connector; ordinary collection only requires `connected?` and `send_commands` on its sessions. For AP LLDP, inject `Collector.new(ap_session_factory: factory)`. The factory receives `controller:` plus lazily resolved `ap_credentials` keywords and returns an object with `read(access_point:)`. When APs need querying but no factory was supplied, only LLDP reports `ap_session_required`; credentials are not read and controller observations remain available.
+
+The collector fixes its platform/model profile before opening the connection and parses each shared query once. It accepts one session callback per collection; repeated callbacks do not replay controller or AP queries, retain the first observations, and mark collection failure as `session_reentered`.
 
 The included AP login adapter is optional. Declare `gem "net-connector", ">= 0.13.0", require: false` in the host application, use `ctx_driver >= 0.2.2`, then load and inject it explicitly:
 
@@ -90,7 +109,7 @@ collector = Wireless::Collector.new(
 )
 ```
 
-This adapter requires an AP password and optional username through `ap_credentials`; custom adapters can own their credentials. `read` returns a hash containing `result: CtxDriver::Capture`, optional `error:` / `cleanup_error:` / `close_error:`, and `skipped:`. The host or adapter owns credentials and session lifecycle; parsers never infer AP console activation or credentials.
+This adapter requires an AP password and optional username through `ap_credentials`; custom adapters can own their credentials. `read` returns a hash containing `result: CtxDriver::Capture`, optional `error:` / `cleanup_error:` / `close_error:` symbol codes (or `nil`), and an optional boolean `skipped:`. Malformed outcomes produce `invalid_command_result`; non-symbol error codes are normalized to that code while preserving any valid captured neighbors. The host or adapter owns credentials and session lifecycle; parsers never infer AP console activation or credentials.
 
 AP access reuses the connected controller and its operation lease; it does not open a separate AP transport. Login, read-only queries, confirmed return, and any failure close share that lease. A busy controller is left untouched. The adapter sends `quit` only from the confirmed AP prompt, and preserves cancellation and independent cleanup failures. Empty AP inventories do not resolve credentials or construct adapters.
 
@@ -99,6 +118,8 @@ Detailed vendor behavior, historical validation notes, and Motor-only integratio
 The lifecycle connector is a host adapter exposing `open { |session| }` (and `platform` for VXLAN and Wireless). It is distinct from a native `Net::Connector::Base` device instance. Borrowed native sessions are accepted by `CtxDriver::Reader` and `CtxChecker::Collector#collect_session`; they are never implicitly connected or retried.
 
 ## Domain vocabulary
+
+H3C BSS/client records retain `VLAN ID` as `vlan` and `Service VLAN ID` as `service_vlan`, including an explicit unknown service VLAN. Client `SM power save` remains `power_save`; `SM power save mode` is `power_save_mode`. These are distinct device fields, not aliases; the former alias behavior is corrected. See [H3C output examples](https://www.h3c.com/cn/d_202206/1627690_30005_0.htm). Repeated `cipher-suite` and `security-ie` configuration lines accumulate their enabled members, as shown in [H3C mixed-security configuration](https://knowledge.h3c.com/Theme/details/137418).
 
 H3C command parsers share `H3c::Parser` for command-output validation and `H3c::RecordParser` for labeled records. `H3c::AuthenticationFields` supplies shared authentication fields; `H3c::Document` preserves configuration source lines. Huawei uses `Huawei::Profile` and command parsers under `Huawei::Parsers`, with the same parameter contract.
 
@@ -136,3 +157,7 @@ Publish dependency gems first. A Git tag, a successful build, or a workflow file
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Remediation recommendations
+
+`wireless collect` 默认输出逐设备诊断，使用 `--scripts` 可选导出配置建议；`wireless review --batch DIR` 可离线补生成既有报告的候选配置、条件回退和只读验收命令。导出不会执行变更；独立 `apply --plan FILE` 必须在真实终端明确确认，配置漂移或失败即停止。详见[修复建议说明](docs/remediation.md)。

@@ -30,7 +30,7 @@ end
 [ 500, 2000, 5000 ].each do |count|
   templates = (1..count).map { |index| "wlan service-template T#{index}\n ssid T#{index}\n#\n" }.join + "return\n"
   stats = measure(expected: [ :complete, count ]) do
-    result = Wireless::Configuration.new.parse(templates, complete: true)
+    result = Wireless::Config.new.parse(templates, complete: true)
     [ result.status, result.records.first.fetch(:service_templates).size ]
   end
   puts JSON.generate(case: "service_templates", count: count, **stats)
@@ -38,7 +38,7 @@ end
   bindings = "wlan ap AP model TEST\n radio 1\n" +
     (1..count).map { |index| "  service-template T#{index} vlan 100\n" }.join + "return\n"
   stats = measure(expected: [ :complete, count ]) do
-    result = Wireless::Configuration.new.parse(bindings, complete: true)
+    result = Wireless::Config.new.parse(bindings, complete: true)
     [ result.status, result.records.first.dig(:access_points, "AP", :radios, "1", :service_templates).size ]
   end
   puts JSON.generate(case: "template_bindings", count: count, **stats)

@@ -108,7 +108,7 @@ RSpec.describe Wireless::RuntimeParser do
     CLI
     parsed = parser.parse(:bsses, text, complete: true)
     expect(parsed).to be_complete
-    expect(parsed.records.map { |row| row.values_at(:ap_name, :radio_id, :vlan) }).to eq([ [ "AP-A", "1", 120 ], [ "AP-B", "2", 121 ] ])
+    expect(parsed.records.map { |row| row.values_at(:ap_name, :radio_id, :vlan, :service_vlan) }).to eq([ [ "AP-A", "1", nil, 120 ], [ "AP-B", "2", 121, nil ] ])
   end
 
   it "keeps relative RSSI distinct from dBm and converts rates and durations explicitly" do

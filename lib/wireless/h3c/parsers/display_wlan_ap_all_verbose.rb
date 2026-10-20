@@ -87,7 +87,8 @@ module Wireless
             issues << { code: :invalid_identity } if missing
             missing
           end
-          total = reported_record_total(text, "APs", issues)
+          total = reported_total(text, noun: "APs", issues: issues,
+            auxiliary_nouns: "connected (?:(?:manual |auto |common )?APs|WTUs)|inside APs|AP licenses")
           issues << { code: :count_mismatch, expected: total, parsed: valid_aps.size } if total && total != valid_aps.size
           # AP 总数只证明 AP 范围；未报告 Radio 的 AP 不能证明其 Radio 清单为空。
           radio_issues = issues.dup
