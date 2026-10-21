@@ -4,6 +4,12 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+## 0.4.1 (2026-10-21)
+
+- Compute a device configuration fingerprint once per review report when exporting multiple eligible plans; recompute for each subsequent report.
+- Require exactly one complete configuration record before exporting executable plans, including when recommendations are supplied by a caller.
+- Add repository-specific AGENTS.md and a review-to-plan serialization benchmark.
+
 ## 0.4.0 (2026-10-20)
 
 - Sync newly created report directory entries before exposing an execution journal; stop before commands if directory durability cannot be confirmed.

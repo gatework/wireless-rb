@@ -33,11 +33,16 @@ module Wireless
             publish("#{prefix}.#{suffix}", lines.map { |line| "! #{line}" }.join("\n") + "\n")
           end
           if @scripts
-            config = document.dig("snapshot", "dimensions", "configuration", "records", 0)
+            # 外部建议不能替代来源完整性；只有唯一完整配置才能绑定可执行计划。
+            observation = document.dig("snapshot", "dimensions", "configuration")
+            records = observation && observation["records"]
+            config = records.first if observation && observation["status"] == "complete" && records.is_a?(Array) && records.one? && records.first.is_a?(Hash)
+            config_sha256 = nil
             advice[:items].each_with_index do |item, index|
               next unless config && item[:status] == "candidate" && item[:change] && ChangePlan.eligible?(config, item[:change])
               commands, rollback = ChangePlan.render(item[:change])
-              plan = { schema_version: 1, platform: "h3c_wireless", device: document.fetch("device"), expected_config_sha256: ChangePlan.fingerprint(config),
+              config_sha256 ||= ChangePlan.fingerprint(config)
+              plan = { schema_version: 1, platform: "h3c_wireless", device: document.fetch("device"), expected_config_sha256: config_sha256,
                 source: source, source_sha256: source_sha256, change: item[:change], commands: commands, rollback: rollback,
                 scope: item[:scope], title: item[:title], prerequisites: item[:prerequisites], impact: item[:impact], verify: item[:verify] }
               publish("#{prefix}.#{index + 1}.plan.json", JSON.pretty_generate(plan) + "\n")

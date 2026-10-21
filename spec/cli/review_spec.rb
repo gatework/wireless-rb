@@ -8,6 +8,50 @@ require "stringio"
 require "digest"
 
 RSpec.describe "Wireless offline review" do
+  it "does not export executable plans from partial or ambiguous configuration even with supplied advice" do
+    observation = Wireless::Config.new.parse("wlan service-template A\n cipher-suite tkip ccmp\n security-ie wpa rsn\n service-template enable\nreturn\n", complete: true)
+    expect(observation).to be_complete
+    document = JSON.parse(JSON.generate(device: { name: "AC", host: "192.0.2.1", platform: "h3c_wireless" },
+      snapshot: { dimensions: { configuration: observation.to_h } }))
+    advice = Wireless::Recommendations.new(document).call
+    expect(advice[:items]).to include(include(status: "candidate"))
+    [ [ "partial", observation.records ], [ "complete", observation.records * 2 ] ].each_with_index do |(status, records), index|
+      Dir.mktmpdir do |root|
+        report = Wireless::CLI::Report.new(File.join(root, "reports"), scripts: true)
+        document["snapshot"]["dimensions"]["configuration"].merge!("status" => status, "records" => JSON.parse(JSON.generate(records)))
+        report.write_review(document, basename: "case#{index}", source: "input", source_sha256: "a" * 64, advice: advice)
+        expect(Dir[File.join(report.directory, "recommendations", "*.plan.json")]).to be_empty
+      end
+    end
+  end
+
+  it "binds every template plan to its device configuration and refreshes the fingerprint on the next report" do
+    Dir.mktmpdir do |root|
+      report = Wireless::CLI::Report.new(File.join(root, "reports"), scripts: true)
+      text = %w[A B].map do |name|
+        "wlan service-template #{name}\n ssid #{name}\n cipher-suite tkip ccmp\n security-ie wpa rsn\n service-template enable\n#\n"
+      end.join("") + "return\n"
+      observation = Wireless::Config.new.parse(text, complete: true)
+      expect(observation).to be_complete
+      document = JSON.parse(JSON.generate(device: { name: "AC", host: "192.0.2.1", platform: "h3c_wireless" },
+        snapshot: { dimensions: { configuration: observation.to_h } }))
+      original = Wireless::ChangePlan.fingerprint(document.dig("snapshot", "dimensions", "configuration", "records", 0))
+      report.write_review(document, basename: "first", source: "input", source_sha256: "a" * 64)
+      document["snapshot"]["dimensions"]["configuration"]["records"][0]["service_templates"][0]["ssid"] = "changed"
+      current = Wireless::ChangePlan.fingerprint(document.dig("snapshot", "dimensions", "configuration", "records", 0))
+      report.write_review(document, basename: "second", source: "input", source_sha256: "b" * 64)
+
+      expect(current).not_to eq(original)
+      { "first" => original, "second" => current }.each do |basename, digest|
+        plans = Dir[File.join(report.directory, "recommendations", "#{basename}.*.plan.json")].sort.map { |path| JSON.parse(File.read(path)) }
+        expect(plans.size).to eq(2)
+        expect(plans.map { |plan| plan["change"]["name"] }).to eq(%w[A B])
+        expect(plans.map { |plan| plan["expected_config_sha256"] }).to eq([ digest, digest ])
+        expect(plans).to all(include("commands" => include(" undo cipher-suite tkip"), "rollback" => include(" cipher-suite tkip")))
+      end
+    end
+  end
+
   it "accepts the actual parser configuration schema including the AP map" do
     Dir.mktmpdir do |root|
       Dir.mkdir(File.join(root, "devices"))
