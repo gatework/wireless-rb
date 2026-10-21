@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "optparse"
+require "net/connector/inventory/filters"
 require "yaml"
 require "ipaddr"
 require "fileutils"
@@ -10,7 +11,7 @@ module Wireless
   module CLI
     # 采集入口的公开参数；凭据始终留在环境中，不传入解析库或 YAML。
     class Options
-      FIELDS = %w[platform ap_names devices netdisco inventory netdisco_config parallel directory dimensions ssh hosts exclude_hosts names exclude_names].freeze
+      FIELDS = (%w[platform ap_names devices netdisco inventory netdisco_config parallel directory dimensions ssh] + Net::Connector::Inventory::Filters::FIELDS).freeze
       SSH_FIELDS = %w[port command_timeout login_timeout host_key_policy known_hosts].freeze
       attr_reader :values, :flags, :environment
 
@@ -107,7 +108,7 @@ module Wireless
         @inventory_public = schema.from_environment(defaults.merge(overrides), sections: sections)
         @netdisco_settings = Net::Connector::Netdisco::Settings.new(env: environment, defaults: defaults, overrides: overrides).for_run(mode: :inventory)
       rescue LoadError
-        raise LoadError, "Netdisco 清单需要 net-connector >= 0.16.0；请安装项目依赖", cause: nil
+        raise LoadError, "Netdisco 清单需要 net-connector >= 0.17.0；请安装项目依赖", cause: nil
       end
 
       # 外部清单同样按文件来源解析路径，并在预检时固定本批配置。
@@ -216,9 +217,12 @@ module Wireless
           p.on("--platform NAME", "默认平台 h3c / h3c_wireless / huawei") { |v| @overrides["platform"] = v }
           p.on("--ap-name LIST", "LLDP 仅选择指定 AP 名称，逗号分隔") { |v| (@overrides["ap_names"] ||= []).concat(list(v)) }
           p.on("--dimensions LIST", "逗号分隔维度；--help 查看支持项") { |v| @overrides["dimensions"] = list(v) }
-          { "--host IP" => "hosts", "--hosts LIST" => "hosts", "--exclude-hosts LIST" => "exclude_hosts",
-            "--name LIST" => "names", "--exclude-name LIST" => "exclude_names" }.each do |option, key|
-            p.on(option, "筛选已有清单，同类条件取并集，排除优先") { |v| (@overrides[key] ||= []).concat(list(v)) }
+          Net::Connector::Inventory::Filters.add_options(p) do |key, value|
+            if value.is_a?(Array)
+              (@overrides[key] ||= []).concat(value)
+            else
+              @overrides[key] = value
+            end
           end
           p.on("--init", "创建缺失配置和环境模板后退出；已有文件不覆盖") { flags[:init] = true }
           p.on("--interactive", "缺少配置时询问是否创建；要求真实终端") { flags[:interactive] = true }
@@ -266,7 +270,7 @@ module Wireless
             path_literals: { "netdisco.db_sslrootcert" => [ "system" ], "ND_DB_SSLROOTCERT" => [ "system" ] }, **@discovery)
         end
       rescue LoadError
-        raise LoadError, "统一配置加载需要 net-connector >= 0.16.0；请安装项目依赖", cause: nil
+        raise LoadError, "统一配置加载需要 net-connector >= 0.17.0；请安装项目依赖", cause: nil
       end
 
       # 各环境层仅编码宿主支持的公开字段，凭据始终留在环境快照。
@@ -324,11 +328,10 @@ module Wireless
           raise ArgumentError, "netdisco_config 须为配置路径，且不能同时声明 devices" unless values["netdisco_config"].is_a?(String) && !values["netdisco_config"].empty? && values["devices"].empty?
           values["netdisco_config"] = File.expand_path(values["netdisco_config"], @cwd)
         end
-        %w[hosts exclude_hosts names exclude_names ap_names].each do |key|
-          items = values[key] = values.fetch(key, [])
-          raise ArgumentError, "#{key} 须为非空字符串数组" unless items.is_a?(Array) && items.all? { |v| v.is_a?(String) && !v.strip.empty? && !/[\x00-\x1f\x7f]/.match?(v) }
-        end
-        %w[hosts exclude_hosts].each { |key| values[key].each { |v| IPAddr.new(v) } }
+        Net::Connector::Inventory::Filters::LISTS.each_key { |key| values[key] = values.fetch(key, []) }
+        Net::Connector::Inventory::Filters.selection(values)
+        items = values["ap_names"]
+        raise ArgumentError, "ap_names 须为非空字符串数组" unless items.is_a?(Array) && items.all? { |v| v.is_a?(String) && !v.strip.empty? && !/[\x00-\x1f\x7f]/.match?(v) }
         ssh = values["ssh"]
         raise ArgumentError, "ssh 包含未知或敏感字段" unless ssh.is_a?(Hash) && (ssh.keys - SSH_FIELDS).empty?
         ssh = ssh_defaults.merge(ssh)

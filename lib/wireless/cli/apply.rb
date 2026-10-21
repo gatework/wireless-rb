@@ -3,6 +3,7 @@
 require "optparse"
 require "json"
 require "digest"
+require "ctx_runner/execution"
 require "ipaddr"
 require "wireless"
 require_relative "report"
@@ -44,7 +45,7 @@ module Wireless
 
       # 没有 --yes 或自动回退；零退出码只确认配置回读，不声称业务已验收。
       def run(argv)
-        @store, @state, @started = nil, nil, false
+        @store, @execution = nil, nil
         options = { directory: File.join(Dir.pwd, "wireless-executions"), port: 22 }
         parser = OptionParser.new do |p|
           p.banner = "用法：wireless apply --plan FILE [--env-file FILE]（必须真实终端明确确认）"
@@ -59,8 +60,8 @@ module Wireless
         raise ArgumentError, "必须使用真实交互终端" unless @input.tty? && @out.tty? && @error.tty?
         raise ArgumentError, "需要单个计划" unless rest.empty? && options[:plan] && options[:port].between?(1, 65_535)
         body = File.read(options[:plan])
-        plan = JSON.parse(body)
-        validate_plan(plan)
+        plan = CtxParser::Immutable.copy(JSON.parse(body))
+        change = validate_plan(plan)
         hash = Digest::SHA256.hexdigest(body)
         host = plan.fetch("device").fetch("host")
         @out.puts "目标：#{plan['device']['name']}（#{host}）；#{plan['scope']}；#{plan['title']}"
@@ -73,43 +74,17 @@ module Wireless
         return @out.puts("已取消，未连接设备。") || 1 unless @input.gets&.strip == token
         settings = credentials(options)
         @store = Report.new(options[:directory])
-        @state = { "status" => "confirmed", "device" => plan["device"], "plan_sha256" => hash, "expected_config_sha256" => plan["expected_config_sha256"], "commands" => plan["commands"], "steps" => [] }
-        @store.write_execution(@state)
-        session_opened, verified = false, false
-        with_session(plan["device"], settings) do |session|
-          raise IOError, "会话回调重复，禁止重放" if session_opened
-          session_opened = true
-          before = session.read_configuration
-          unless ChangePlan.fingerprint(before) == plan["expected_config_sha256"] && ChangePlan.eligible?(before, plan["change"])
-            raise ArgumentError, "配置已变化或增量前提不满足"
-          end
-          plan["commands"].each_with_index do |command, index|
-            @state["status"] = "executing"
-            @state["pending_command"] = index
-            @store.write_execution(@state)
-            @started = true
-            raise IOError, "设备命令未确认" unless session.write(command) == true
-            @state["steps"] << { "index" => index, "status" => "acknowledged" }
-            @state.delete("pending_command")
-            @store.write_execution(@state)
-          end
-          after = session.read_configuration
-          raise IOError, "配置验收未通过" unless ChangePlan.satisfied?(after, plan["change"])
-          @state["observed_config_sha256"] = ChangePlan.fingerprint(after)
-          verified = true
-        end
-        raise IOError, "会话未完成配置验证" unless verified
-        @state["status"] = "configuration_verified"
-        @store.write_execution(@state)
+        @execution = CtxRunner::Execution.new(plan: plan, change: change, journal: @store, plan_sha256: hash)
+        @execution.run { |operation| with_session(plan["device"], settings, &operation) }
         @out.puts "配置回读已确认；仍需完成业务验收，未执行保存配置。日志：#{@store.directory}/execution.json"
         0
       rescue Interrupt
-        record_failure("interrupted")
-        @error.puts "操作中断；#{@started ? '设备效果可能不完整，请先回读核对，禁止重放。' : '尚未下发业务配置。'}"
+        report_journal_failure
+        @error.puts "操作中断；#{@execution&.started? ? '设备效果可能不完整，请先回读核对，禁止重放。' : '尚未下发业务配置。'}"
         130
       rescue StandardError, LoadError => error
-        record_failure(error.class.name)
-        @error.puts "下发停止（#{error.class.name}）；#{@started ? '效果未完整确认，先回读，不自动重放或回退。' : '未下发业务配置；检查终端、计划、凭据及当前配置是否仍匹配。'}"
+        report_journal_failure
+        @error.puts "下发停止（#{error.class.name}）；#{@execution&.started? ? '效果未完整确认，先回读，不自动重放或回退。' : '未下发业务配置；检查终端、计划、凭据及当前配置是否仍匹配。'}"
         2
       end
 
@@ -121,8 +96,9 @@ module Wireless
         host = plan.fetch("device").fetch("host")
         raise ArgumentError, "目标地址无效" unless host.is_a?(String) && !host.include?("/") && IPAddr.new(host).to_s == host
         raise ArgumentError, "配置指纹无效" unless plan["expected_config_sha256"].is_a?(String) && plan["expected_config_sha256"].match?(/\A[0-9a-f]{64}\z/)
-        commands, rollback = ChangePlan.render(plan.fetch("change"))
-        raise ArgumentError, "计划命令被修改" unless commands == plan["commands"] && rollback == plan["rollback"]
+        change = ChangePlan.build(plan.fetch("change"))
+        raise ArgumentError, "计划命令被修改" unless change.commands == plan["commands"] && change.rollback == plan["rollback"]
+        change
       end
 
       # 环境文件显式选取，凭据不进入计划或执行日志，SSH 主机密钥始终严格校验。
@@ -134,7 +110,7 @@ module Wireless
         { username: username, password: env["NC_H3C_WIRELESS_PASSWORD"] || env["NC_DEVICE_PASSWORD"], enable_password: env["NC_ENABLE_PASSWORD"],
           port: options[:port], host_key_policy: "strict", command_timeout: 60, login_timeout: 15 }
       rescue LoadError
-        raise LoadError, "统一凭据加载需要 net-connector >= 0.16.0；请安装项目依赖", cause: nil
+        raise LoadError, "统一凭据加载需要 net-connector >= 0.17.0；请安装项目依赖", cause: nil
       end
 
       # 原生会话只打开一次，读写处于同一操作租约中。
@@ -146,14 +122,12 @@ module Wireless
         end
       end
 
-      # 失败记录尽力持久化；记录失败也不允许继续发送任何命令。
-      def record_failure(code)
-        return unless @store && @state
-        @state["status"] = @started ? "uncertain" : "failed"
-        @state["error"] = code
-        @store.write_execution(@state)
-      rescue StandardError, Interrupt
+      # 公共执行器保存失败状态；CLI 只呈现持久性尚未确认的诊断。
+      def report_journal_failure
+        return unless @execution&.journal_failed?
         @error.puts "执行日志收尾未确认；保留已有检查点，禁止据此重放配置。"
+      rescue StandardError, Interrupt
+        nil
       end
     end
   end

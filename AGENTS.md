@@ -32,3 +32,9 @@
 - 构建后运行 `ruby script/verify_package.rb pkg/wireless-rb-<version>.gem`；另支持连接器/expect 候选包。源码联调、隔离包、实机结果分别报告。
 - 修改示例与 CLI 后运行实际 checkout 的普通入口；配置遵循共享服务的来源与优先级，不新增平行解析逻辑。
 - 更新 CHANGELOG 与相关文档。当前优化授权不包含提交、推送、发布或调整可见性。
+
+## 公共业务流程
+
+采集会话约束、共享查询与事实外壳由 `ctx_runner` 提供；VXLAN/Wireless 的批量交付、报告检查点和变更执行也由 Runner 统一维护。领域规则、厂商命令、健康评估及操作租约留在当前模块，不复制公共状态机。
+
+源码联调使用 `CTX_RUNNER_PATH=../ctx_runner bundle exec rake`；普通安装验证不设置该变量。首次发布依赖顺序为 ctx_parser → ctx_driver → ctx_runner → 消费模块。未发布 Runner 时先构建安装候选包，隔离包验证显式传入候选，不能依靠相邻源码路径。

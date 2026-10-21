@@ -2,6 +2,8 @@
 
 require_relative "parser_registry"
 require "ctx_driver"
+require "ctx_runner/collection"
+require "ctx_runner/query"
 require_relative "snapshot"
 require_relative "neighbor_parser"
 
@@ -46,44 +48,33 @@ module Wireless
       unless compatible_platform?(connector.platform, profile, model)
         raise ArgumentError, "Wireless platform differs from the device connector"
       end
-      stage = :connect
-      session_started = false
-      begin
-        connector.open do |session|
-          # 宿主重复回调不能重放查询或覆盖首次事实。
-          if session_started
-            observations[:collection] = unavailable_observation(:collection, :failed, :session_reentered)
+      collection = CtxRunner::Collection.new
+      collection.open(connector) do |session|
+        reader = CtxDriver::Reader.new(session: session, clock: @clock)
+        collection.stage = :prepare
+        preparation = reader.read(profile.preparation_command)
+        error = preparation.failure&.fetch(:code)
+        queries.each do |command, names|
+          if error
+            names.each { |name| observations[name] = unavailable_observation(name, :failed, error, skipped: true, stage: collection.stage) }
             next
           end
-          session_started = true
-          reader = CtxDriver::Reader.new(session: session, clock: @clock)
-          stage = :prepare
-          preparation = reader.read(profile.preparation_command)
-          error = preparation.failure&.fetch(:code)
-          queries.each do |command, names|
-            if error
-              names.each { |name| observations[name] = unavailable_observation(name, :failed, error, skipped: true, stage: stage) }
-              next
-            end
-            stage = :collect
-            observations.merge!(collect_command(reader, command, names, profile))
-          end
-          if requested.include?(:lldp) && profile.commands.key?(:lldp)
-            unavailable_code = error || reader.failure&.fetch(:code)
-            observations[:lldp] = if unavailable_code
-              unavailable_observation(:lldp, :failed, unavailable_code, skipped: true, stage: stage)
-            else
-              collect_ap_neighbors(session, observations[:access_points], ap_credentials, ap_names)
-            end
-          end
-          stage = :close
+          collection.stage = :collect
+          observations.merge!(collect_command(reader, command, names, profile))
         end
-      rescue StandardError => error
-        raise unless CtxDriver::Failure.connection_error?(error, connector)
-
-        code = CtxDriver::Failure.code(error, :connection_failed)
-        requested.each { |name| observations[name] ||= unavailable_observation(name, :failed, code, skipped: true, stage: stage) }
-        observations[:collection] = unavailable_observation(:collection, :failed, stage == :close ? :session_close_failed : code)
+        if requested.include?(:lldp) && profile.commands.key?(:lldp)
+          unavailable_code = error || reader.failure&.fetch(:code)
+          observations[:lldp] = if unavailable_code
+            unavailable_observation(:lldp, :failed, unavailable_code, skipped: true, stage: collection.stage)
+          else
+            collect_ap_neighbors(session, observations[:access_points], ap_credentials, ap_names)
+          end
+        end
+      end
+      if collection.failure
+        code = collection.failure.fetch(:code)
+        requested.each { |name| observations[name] ||= unavailable_observation(name, :failed, code, skipped: true, stage: collection.stage) }
+        observations[:collection] = unavailable_observation(:collection, :failed, code)
       end
       # 连接器未交付会话也不能把空观测视为完整采集。
       requested.each { |name| observations[name] ||= unavailable_observation(name, :failed, :session_not_opened, skipped: true) }
@@ -103,25 +94,12 @@ module Wireless
 
     # 单条命令负责自身解析失败；无关查询保留已完成事实。
     def collect_command(reader, command, names, profile)
-      capture = reader.read(command)
-      metadata = { started_at: capture.started_at, completed_at: capture.completed_at, evidence: capture.evidence }
-      unless capture.success?
-        return failed_observations(names, capture.failure, command: command, skipped: capture.skipped?, **metadata)
+      unavailable = ->(name, capture, details) do
+        metadata = { started_at: capture.started_at, completed_at: capture.completed_at, evidence: capture.evidence }
+        unavailable_observation(name, :failed, details.fetch(:code), **details.except(:code), command: command, skipped: capture.skipped?).with(**metadata)
       end
-      begin
-        profile.parse_many(names, capture.body, complete: true, command: command).to_h do |name, result|
-          [ name, Observation.new(name: name, **result.to_h, **metadata) ]
-        end
-      rescue StandardError => error
-        details = CtxDriver::Failure.details(error, fallback: :command_processing_failed, stage: :parse)
-        failed_observations(names, details, command: command, **metadata)
-      end
-    end
-
-    # 共享查询的各视图使用相同的安全失败及来源元数据。
-    def failed_observations(names, failure, command:, skipped: false, **metadata)
-      names.to_h do |name|
-        [ name, unavailable_observation(name, :failed, failure.fetch(:code), **failure.except(:code), command: command, skipped: skipped).with(**metadata) ]
+      CtxRunner::Query.new(reader: reader, parser: profile).read(command, names: names, unavailable: unavailable) do |name, result, capture|
+        Observation.new(name: name, **result.to_h, started_at: capture.started_at, completed_at: capture.completed_at, evidence: capture.evidence)
       end
     end
 

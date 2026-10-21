@@ -185,3 +185,15 @@ ruby bin/wireless parse --dimension lldp --ap-name AP-01 --file lldp.txt --compl
 ## 修复建议
 
 `wireless collect` 默认输出逐设备诊断，使用 `--scripts` 可选导出配置建议；`wireless review --batch DIR` 可离线补生成既有报告的候选配置、条件回退和只读验收命令。导出不会执行变更；独立 `apply --plan FILE` 必须在真实终端明确确认，配置漂移或失败即停止。详见[修复建议说明](../docs/remediation.md)。
+
+## 统一设备筛选
+
+collect 的筛选与备份/拓扑共用 net-connector 的 Inventory::Selection。需要安装包含 `net/connector/inventory/filters` 的当前候选连接器；collect 帮助也从该组件读取参数定义，离线 parse/review 不加载它。
+
+```sh
+wireless collect --hosts 192.0.2.0/24 --name edge --exclude-name spare --model 'S68*' --model-match glob --plan
+```
+
+IP 支持单地址、CIDR、范围；名称及型号支持 contains（默认）、prefix、glob，不区分大小写。`--vendor`/`--exclude-vendor` 使用连接器平台标识（如 cisco_nxos、h3c、h3c_wireless、huawei），不是原始厂商标签。同字段条件为 OR，跨字段为 AND，排除优先。缺失型号不命中包含规则。`--model`/`--exclude-model`、`--name-match`/`--model-match` 可组合；筛选只选择已有清单，不扫描地址、不扩大平台支持范围。
+
+YAML 顶层对应 hosts/exclude_hosts、names/exclude_names、vendors/exclude_vendors、models/exclude_models、name_match/model_match。Netdisco inventory 段使用 include_hosts/include_names/include_vendors/include_models 及对应 exclude 字段。

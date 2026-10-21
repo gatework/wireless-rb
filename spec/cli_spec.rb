@@ -53,6 +53,24 @@ RSpec.describe "WIRELESS installed command" do
     expect(JSON.parse(stdout)).to include("status" => "complete", "records" => [])
   end
 
+  it "reports a missing collection dependency without a backtrace" do
+    program = <<~RUBY
+      require "wireless/cli"
+      module Kernel
+        alias original_require require
+        def require(path)
+          raise LoadError, "missing selection" if path == "net/connector/inventory/filters"
+          original_require(path)
+        end
+      end
+      exit Wireless::CLI.run(["collect", "--help"])
+    RUBY
+    _stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-I#{root}/lib", "-e", program)
+    expect(status.exitstatus).to eq(2)
+    expect(stderr).to include("net-connector")
+    expect(stderr).not_to include("LoadError", "<top (required)>")
+  end
+
   it "loads the library and CLI without the connector or executing a command" do
     program = 'require "wireless/cli"; abort if defined?(Net::Connector); abort if $LOADED_FEATURES.any? { |f| f.include?("wireless/cli/collect") }'
     stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-I#{root}/lib", "-e", program)

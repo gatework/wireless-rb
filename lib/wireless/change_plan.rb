@@ -1,22 +1,33 @@
 # frozen_string_literal: true
 
-require "digest"
+require "ctx_runner/fingerprint"
 require "json"
 
 module Wireless
   # 只支持已知 H3C 模板加固增量，不接收任意命令文本。
   module ChangePlan
-    # 配置映射顺序不影响指纹，列表顺序保持语义。
-    def self.fingerprint(value) = Digest::SHA256.hexdigest(JSON.generate(canonical(value)))
+    # 固定领域参数和命令，公共执行器只调用明确的前后置条件。
+    class Change
+      attr_reader :commands, :rollback
 
-    # 保存 JSON 与实时事实共用字符串键表示。
-    def self.canonical(value)
-      case value
-      when Hash then value.transform_keys(&:to_s).sort.to_h.transform_values { |entry| canonical(entry) }
-      when Array then value.map { |entry| canonical(entry) }
-      else value
+      def initialize(value)
+        @value = CtxParser::Immutable.copy(value)
+        @commands, @rollback = CtxParser::Immutable.copy(ChangePlan.render(@value))
+        freeze
       end
+
+      def eligible?(config) = ChangePlan.eligible?(config, @value)
+      def satisfied?(after, before:) = ChangePlan.satisfied?(after, @value)
+      def inspect = "#<#{self.class.name}>"
     end
+
+    def self.build(value) = Change.new(value)
+
+    # 配置映射顺序不影响指纹，列表顺序保持语义。
+    def self.fingerprint(value) = CtxRunner::Fingerprint.call(value)
+
+    # 兼容既有领域入口，配置身份协议仅由 Runner 实现。
+    def self.canonical(value) = CtxRunner::Fingerprint.canonical(value)
 
     # 安全参数变更前停用模板，结束后只恢复原启用状态。
     def self.render(change)

@@ -45,6 +45,16 @@ RSpec.describe Wireless::CLI::Collect do
     end
   end
 
+  it "shares address, name, vendor and model selection without opening sessions" do
+    config(devices: [ { "host" => "192.0.2.10", "name" => "EDGE", "model" => "S6800" },
+      { "host" => "192.0.2.11", "name" => "EDGE-spare", "model" => "S6800" } ])
+    args = [ "--plan", "--json", "--hosts", "192.0.2.1-20", "--name", "edge", "--exclude-name", "spare",
+      "--vendor", "h3c", "--model", "s68*", "--model-match", "glob" ]
+    expect(run_cli(*args)).to eq(0)
+    expect(JSON.parse(@out.string).map { |row| row.fetch("host") }).to eq([ "192.0.2.10" ])
+    expect(Dir).not_to exist(File.join(@directory, "reports"))
+  end
+
   def config(**overrides)
     File.write(@config, YAML.dump({ "directory" => File.join(@directory, "reports"), "dimensions" => [ "access_points" ],
       "devices" => [ { "host" => "192.0.2.10", "name" => "WLC", "platform" => "h3c" } ] }.merge(overrides.transform_keys(&:to_s))))

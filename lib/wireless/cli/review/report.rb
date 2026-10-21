@@ -55,22 +55,14 @@ module Wireless
         def finish_review(entries, source_batch:)
           counts = entries.each_with_object(Hash.new(0)) { |entry, total| entry[:counts].each { |key, count| total[key] += count } }
           summary = { status: "incomplete", review_only: true, devices: entries.size, counts: counts, source_batch: source_batch, reports: entries }
-          publish("review.json", JSON.pretty_generate(summary) + "\n")
+          checkpoint("review.json", summary)
           lines = [ "WIRELESS 修复建议", "", "仅生成建议，未执行设备变更。candidate 需要确认条件；blocked 需要补齐参数；investigate 为排查或补采任务。", "", "设备：#{entries.size}；建议分类：#{counts}", "", "未命中规则不代表网络健康；本次不推断跨设备 Fabric 归属或完整业务基线。", "" ]
           entries.each do |entry|
             device = entry[:device] || {}
             lines << "#{device['name']}（#{device['host']}）：#{entry[:counts]}；报告：#{entry[:report]}"
           end
           publish("review.txt", lines.join("\n") + "\n")
-          begin
-            publish("review.json", JSON.pretty_generate(summary.merge(status: "complete")) + "\n")
-          rescue CLI::Report::Error => error
-            restore_checkpoint(JSON.pretty_generate(summary) + "\n", relative: "review.json") if error.committed?
-            raise
-          rescue Interrupt
-            restore_checkpoint(JSON.pretty_generate(summary.merge(status: "interrupted")) + "\n", relative: "review.json")
-            raise
-          end
+          finalize("review.json", summary.merge(status: "complete"), checkpoint: summary)
         end
 
         private
