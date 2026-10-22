@@ -218,7 +218,7 @@ RSpec.describe Wireless::CLI::Report do
     end
     report.write(result)
     report.finish([ result ], requested: [ result.fetch(:device) ])
-    expect(synced).to eq([ "#{report.directory}/devices" ] * 2 + [ "#{report.directory}/recommendations" ] * 3 + [ report.directory ] * 3)
+    expect(synced).to eq([ "#{report.directory}/devices" ] * 2 + [ report.directory ] + [ "#{report.directory}/recommendations" ] * 3 + [ report.directory ] * 3)
     Dir["#{report.directory}/**/*"].each do |path|
       expect(File.stat(path).mode & 0o777).to eq(File.directory?(path) ? 0o700 : 0o600)
     end

@@ -25,8 +25,8 @@ Gem::Specification.new do |spec|
   spec.bindir = "bin"
   spec.executables = [ "wireless" ]
 
-  spec.add_dependency "ctx_cli", "~> 0.1.0"
-  spec.add_dependency "ctx_runner", "~> 0.1.0"
+  spec.add_dependency "ctx_cli", "~> 0.2.0"
+  spec.add_dependency "ctx_runner", "~> 0.1.1"
   spec.add_dependency "ctx_parser"
   spec.add_dependency "ctx_driver", ">= 0.2.4"
   spec.add_dependency "date"

@@ -31,7 +31,7 @@ RSpec.describe "Wireless interactive apply" do
       process_environment = file_credentials ? { "NC_DEVICE_USERNAME" => "process-user" } : { "NC_DEVICE_USERNAME" => "test" }
       credentials = []
       commands, rollback = Wireless::ChangePlan.render(change)
-      plan = { schema_version: 1, platform: "h3c_wireless", device: { "host" => "192.0.2.1", "name" => "test" }, expected_config_sha256: Wireless::ChangePlan.fingerprint(config), change: change, commands: commands, rollback: rollback, prerequisites: [], impact: "test" }
+      plan = { schema_version: 1, platform: "h3c_wireless", device: { "host" => "192.0.2.1", "name" => "test" }, expected_config_sha256: CtxRunner::Fingerprint.call(config), change: change, commands: commands, rollback: rollback, prerequisites: [], impact: "test" }
       plan[:commands] = [ "reboot" ] if altered
       path = File.join(root, "plan.json")
       File.write(path, JSON.generate(plan))
@@ -70,6 +70,12 @@ RSpec.describe "Wireless interactive apply" do
       journals = Dir[File.join(root, "execution", "*", "execution.json")].map { |file| JSON.parse(File.read(file)) }
       { status: status, reads: reads, writes: writes, connections: connections, journals: journals, error: error.string, credentials: credentials, environment: process_environment }
     end
+  end
+
+  it "rejects an oversized plan before confirmation or connection" do
+    require "ctx_cli/input"
+    stub_const("CtxCli::Input::MAX_BYTES", 32)
+    expect(exercise).to include(status: 2, connections: [], writes: [], journals: [])
   end
 
   it "loads automatic credentials without polluting the input environment" do

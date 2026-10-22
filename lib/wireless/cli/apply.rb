@@ -2,7 +2,9 @@
 
 require "optparse"
 require "ctx_cli/terminal"
+require "ctx_cli/input"
 require "json"
+require "ctx_runner/document"
 require "digest"
 require "ctx_runner/execution"
 require "ipaddr"
@@ -26,7 +28,7 @@ module Wireless
         raise IOError, "配置回读失败" unless capture.success?
         observation = Wireless::Config.new(platform: :h3c_wireless).parse(capture.body, complete: true)
         raise ArgumentError, "配置证据不完整" unless observation.complete? && observation.records.one?
-        JSON.parse(JSON.generate(observation.records.first))
+        CtxRunner::Document.call(observation.records.first)
       end
 
       # 每次只发一条命令；失败立即交还宿主，原始输出不进入终端和日志报告。
@@ -61,7 +63,7 @@ module Wireless
         terminal = CtxCli::Terminal.new(input: @input, out: @out)
         terminal.require_tty!(@error)
         raise ArgumentError, "需要单个计划" unless rest.empty? && options[:plan] && options[:port].between?(1, 65_535)
-        body = File.read(options[:plan])
+        body = CtxCli::Input.read(path: options[:plan])
         plan = CtxParser::Immutable.copy(JSON.parse(body))
         change = validate_plan(plan)
         hash = Digest::SHA256.hexdigest(body)
@@ -111,7 +113,7 @@ module Wireless
         { username: username, password: env["NC_H3C_WIRELESS_PASSWORD"] || env["NC_DEVICE_PASSWORD"], enable_password: env["NC_ENABLE_PASSWORD"],
           port: options[:port], host_key_policy: "strict", command_timeout: 60, login_timeout: 15 }
       rescue LoadError
-        raise LoadError, "统一凭据加载需要 net-connector >= 0.17.1；请安装项目依赖", cause: nil
+        raise LoadError, "统一凭据加载需要 net-connector >= 0.16.0；请安装项目依赖", cause: nil
       end
 
       # 原生会话只打开一次，读写处于同一操作租约中。

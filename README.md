@@ -18,7 +18,7 @@ ruby bin/wireless collect --plan
 ruby bin/wireless parse --dimension access_points --file aps.txt --complete
 ```
 
-The CLI follows VXLAN conventions for layered configuration, inventory filtering, concurrency, progress, private per-device reports and exit codes. Collection supports H3C and Huawei; AP LLDP is explicit and uses separate AP credentials. Host configuration and collection require optional `net-connector >= 0.16.0` with `Config`; environment-file parsing is provided by that dependency. Parser installation stays independent of transport. Both `wireless collect` and `ruby bin/wireless.rb` discover system, user, script-directory and invocation-directory files, then overlay explicit files. Values follow CLI > process environment > YAML > .env > defaults. Initialization writes to the user configuration directory or explicit paths; reports default to `wireless-reports/` in the invocation directory. See the [CLI guide](bin/README.md).
+The CLI follows VXLAN conventions for layered configuration, inventory filtering, concurrency, progress, private per-device reports and exit codes. Collection supports H3C and Huawei; AP LLDP is explicit and uses separate AP credentials. Host configuration and collection require optional `net-connector >= 0.17.1` with `Config`; environment-file parsing is provided by that dependency. Parser installation stays independent of transport. Both `wireless collect` and `ruby bin/wireless.rb` discover system, user, script-directory and invocation-directory files, then overlay explicit files. Values follow CLI > process environment > YAML > .env > defaults. Initialization writes to the user configuration directory or explicit paths; reports default to `wireless-reports/` in the invocation directory. See the [CLI guide](bin/README.md).
 
 
 ## Features
@@ -161,3 +161,5 @@ MIT. See [LICENSE](LICENSE).
 ## Remediation recommendations
 
 `wireless collect` 默认输出逐设备诊断，使用 `--scripts` 可选导出配置建议；`wireless review --batch DIR` 可离线补生成既有报告的候选配置、条件回退和只读验收命令。导出不会执行变更；独立 `apply --plan FILE` 必须在真实终端明确确认，配置漂移或失败即停止。详见[修复建议说明](docs/remediation.md)。
+
+Offline review requires `snapshot.target.host` to match the canonical device host. Reports without target identity must be collected again; the unbound legacy format is no longer accepted.

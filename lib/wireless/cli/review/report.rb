@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "digest"
-require "fileutils"
+require "ctx_runner/fingerprint"
 require_relative "../../recommendations"
 require_relative "../../change_plan"
 
@@ -14,7 +14,7 @@ module Wireless
         def write_review(document, basename:, source:, source_sha256:, advice: nil)
           raise ArgumentError, "非法报告名称" unless basename.match?(/\A[A-Za-z0-9_.-]+\z/)
           folder = File.join(directory, "recommendations")
-          FileUtils.mkdir_p(folder, mode: 0o700)
+          prepare_directory(folder)
           advice ||= Recommendations.new(document).call
           advice = report_advice(advice).merge(source: source, source_sha256: source_sha256)
           prefix = "recommendations/#{basename}"
@@ -41,7 +41,7 @@ module Wireless
             advice[:items].each_with_index do |item, index|
               next unless config && item[:status] == "candidate" && item[:change] && ChangePlan.eligible?(config, item[:change])
               commands, rollback = ChangePlan.render(item[:change])
-              config_sha256 ||= ChangePlan.fingerprint(config)
+              config_sha256 ||= CtxRunner::Fingerprint.call(config)
               plan = { schema_version: 1, platform: "h3c_wireless", device: document.fetch("device"), expected_config_sha256: config_sha256,
                 source: source, source_sha256: source_sha256, change: item[:change], commands: commands, rollback: rollback,
                 scope: item[:scope], title: item[:title], prerequisites: item[:prerequisites], impact: item[:impact], verify: item[:verify] }

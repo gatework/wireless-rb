@@ -79,8 +79,8 @@ module Wireless
             raise ArgumentError, "Missing AP model" if kind == :access_points && !/\Amodel \S+\z/i.match?(suffix.to_s)
             @configuration.build_entity_scope(kind, name, model: suffix&.sub(/\Amodel /i, ""), type: suffix&.sub(/\Atype /i, ""))
           elsif (match = /\Awlan (global-configuration|virtual-ap-group(?: \S+)?|ap-license-group|vip-client-group)\z/i.match(line))
-            key = match[1].tr("-", "_").split.first.to_sym
-            @configuration.build_global_scope(key, identity: line.split[2])
+            key = match[1].tr("-", "_").split(" ").first.to_sym
+            @configuration.build_global_scope(key, identity: line.split(" ")[2])
           end
         end
 
@@ -184,7 +184,7 @@ module Wireless
         def apply_setting(scope, block, config)
           line = block.text
           owner, kind, record = scope.record, scope.kind, scope.settings
-          words = line.split
+          words = line.split(" ")
           enabled = !line.start_with?("undo ")
           case line
           when /\A(?:undo )?region-code-lock enable\z/
@@ -223,7 +223,7 @@ module Wireless
             assign_setting(record, :has_preshared_key, true, block)
           when /\Aakm mode (.+)\z/
             return false unless kind == :service_templates
-            assign_setting(record, :akm_modes, Regexp.last_match(1).downcase.gsub("802.1x", "dot1x").split, block)
+            assign_setting(record, :akm_modes, Regexp.last_match(1).downcase.gsub("802.1x", "dot1x").split(" "), block)
           when /\A(cipher-suite|security-ie) (.+)\z/
             return false unless kind == :service_templates
             key = words.first == "cipher-suite" ? :cipher_suites : :security_ies

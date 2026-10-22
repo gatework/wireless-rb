@@ -11,7 +11,7 @@ ruby bin/wireless.rb
 
 也可在 `bin/` 运行 `ruby wireless.rb`；从其他目录指定脚本绝对路径也可。入口直接加载相邻 `lib/`，沿用已选择的 RubyGems/Bundler，不搜索相邻源码。脚本默认读取 Netdisco 清单并采集已选控制器，不扫描地址。
 
-首次没有配置时执行 `ruby bin/wireless.rb --init --non-interactive`，再填写用户配置目录中的 `.env` 与 `wireless.yml`。已有文件保留。配置加载及联网使用含 `Config` 的可选 `net-connector >= 0.17.1`，环境文件解析由该依赖提供；本仓库 Gemfile 已声明。
+首次没有配置时执行 `ruby bin/wireless.rb --init --non-interactive`，再填写用户配置目录中的 `.env` 与 `wireless.yml`。已有文件保留。配置加载及联网使用含 `Config` 的可选 `net-connector >= 0.16.0`，环境文件解析由该依赖提供；本仓库 Gemfile 已声明。
 
 安装 gem 后仍使用 `wireless collect` / `wireless parse`，或源码统一入口 `ruby bin/wireless collect`。两者调用同一采集与配置实现，报告默认位于启动目录 `wireless-reports/`。
 

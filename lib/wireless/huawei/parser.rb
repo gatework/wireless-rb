@@ -38,7 +38,7 @@ module Wireless
             issues << { code: :missing_header, line: index + 1 }
           else
             begin
-              records << (name == :access_points ? parse_ap_row(row.split) : parse_client_row(row.split))
+              records << (name == :access_points ? parse_ap_row(row.split(" ")) : parse_client_row(row.split(" ")))
             rescue ArgumentError, IPAddr::InvalidAddressError
               issues << { code: :invalid_row, line: index + 1 }
             end

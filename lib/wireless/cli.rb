@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "wireless/version"
-require "ctx_cli/application"
+require "ctx_cli/router"
 
 module Wireless
   # 命令入口按需加载采集或解析实现；核心库无需加载 CLI。
@@ -31,7 +31,7 @@ module Wireless
           Parse.new(out: out, error: error, input: input, command: collect_options.fetch(:command, "wireless parse")).run(arguments)
         end
       }
-      CtxCli::Application.new(name: "wireless", version: Wireless::VERSION, usage: USAGE,
+      CtxCli::Router.new(name: "wireless", version: Wireless::VERSION, usage: USAGE,
         commands: commands, out: out, error: error).run(argv)
     end
 

@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
+require "ctx_cli/collection"
 require "optparse"
 require "ctx_cli/options"
 require "ctx_cli/terminal"
-require "ctx_cli/initialization"
+require "ctx_cli/initializer"
 require "net/connector/inventory/filters"
 require "yaml"
 require "ipaddr"
@@ -55,7 +56,7 @@ module Wireless
       # 自动化拒绝强制问答；帮助分支无需检查终端或消费输入。
       def validate_interaction!(input:, error:)
         if flags[:interactive] && !CtxCli::Terminal.tty?(input, error)
-          raise ArgumentError, "--interactive 需要交互终端；自动化请使用 --init --non-interactive"
+          raise CtxCli::Collection::Error, "--interactive 需要交互终端；自动化请使用 --init --non-interactive"
         end
       end
 
@@ -151,7 +152,7 @@ module Wireless
         template = template.lines("\n").select { |line| line.start_with?("#") }.join("") +
           Net::Connector::Config.dump(document, name: "wireless", path: config_loader.init_config)
         { config_loader.init_config => template, config_loader.init_env_file => File.read(File.join(__dir__, "templates/env.example")) }.each do |path, body|
-          status = CtxCli::Initialization.new(prefix: ".wireless-init-").create(path: path, contents: body)
+          status = CtxCli::Initializer.new(prefix: ".wireless-init-").create(path: path, contents: body)
           @out.puts "#{status == :created ? '已创建' : '已保留'}：#{path}"
         end
         @out.puts "请检查配置及凭据后再次运行；本次未读取清单、未连接设备。"

@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
-require "ctx_runner/fingerprint"
-require "json"
+require "ctx_parser/immutable"
 
 module Wireless
   # 只支持已知 H3C 模板加固增量，不接收任意命令文本。
@@ -17,17 +16,23 @@ module Wireless
       end
 
       def eligible?(config) = ChangePlan.eligible?(config, @value)
-      def satisfied?(after, before:) = ChangePlan.satisfied?(after, @value)
+
+      # 只允许目标模板的两个协议集合变化，其余配置必须与执行前一致。
+      def satisfied?(after, before:)
+        return false unless eligible?(before)
+        templates = before.fetch("service_templates").map do |template|
+          next template unless template["name"] == @value["name"]
+          settings = template.fetch("configuration").merge(
+            "cipher_suites" => @value["cipher_suites"] - [ "tkip" ],
+            "security_ies" => @value["security_ies"] - [ "wpa" ])
+          template.merge("configuration" => settings)
+        end
+        after == before.merge("service_templates" => templates)
+      end
       def inspect = "#<#{self.class.name}>"
     end
 
     def self.build(value) = Change.new(value)
-
-    # 配置映射顺序不影响指纹，列表顺序保持语义。
-    def self.fingerprint(value) = CtxRunner::Fingerprint.call(value)
-
-    # 兼容既有领域入口，配置身份协议仅由 Runner 实现。
-    def self.canonical(value) = CtxRunner::Fingerprint.canonical(value)
 
     # 安全参数变更前停用模板，结束后只恢复原启用状态。
     def self.render(change)
@@ -54,16 +59,12 @@ module Wireless
     # 只修改与源模板状态完全匹配的明确事实。
     def self.eligible?(config, change)
       render(change)
-      template = config.fetch("service_templates", []).find { |entry| entry["name"] == change["name"] }
-      template && template["enabled"] == change["enabled"] && %w[cipher_suites security_ies].all? { |key| template.dig("configuration", key) == change[key] }
+      templates = config.fetch("service_templates", []).select { |entry| entry["name"] == change["name"] }
+      return false unless templates.one?
+      template = templates.first
+      template["enabled"] == change["enabled"] && %w[cipher_suites security_ies].all? { |key| template.dig("configuration", key) == change[key] }
     rescue ArgumentError
       false
-    end
-
-    # 验收检查精确协议集合及原启停状态，避免仅凭 CLI 成功确认完成。
-    def self.satisfied?(config, change)
-      template = config.fetch("service_templates", []).find { |entry| entry["name"] == change["name"] }
-      template && template["enabled"] == change["enabled"] && template.dig("configuration", "cipher_suites") == change["cipher_suites"] - [ "tkip" ] && template.dig("configuration", "security_ies") == change["security_ies"] - [ "wpa" ]
     end
   end
 end

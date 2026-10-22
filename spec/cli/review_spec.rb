@@ -8,11 +8,44 @@ require "stringio"
 require "digest"
 
 RSpec.describe "Wireless offline review" do
+  it "rejects oversized source documents before creating reports" do
+    require "ctx_cli/input"
+    stub_const("CtxCli::Input::MAX_BYTES", 32)
+    Dir.mktmpdir do |root|
+      Dir.mkdir(File.join(root, "devices"))
+      File.write(File.join(root, "devices", "large.json"), JSON.generate(device: { name: "AC", host: "192.0.2.1" }, snapshot: nil))
+      error = StringIO.new
+      expect(Wireless::CLI.run([ "review", "--batch", root ], out: StringIO.new, error: error)).to eq(2)
+      expect(File.exist?(File.join(root, "reviews"))).to be(false)
+      expect(error.string).not_to include("192.0.2.1")
+    end
+  end
+
+  it "rejects mismatched and duplicate device identities before creating output" do
+    Dir.mktmpdir do |root|
+      Dir.mkdir(File.join(root, "devices"))
+      path = File.join(root, "devices", "ac.json")
+      document = { device: { name: "AC", host: "192.0.2.1" }, snapshot: { target: { host: "192.0.2.2" }, dimensions: {} } }
+      File.write(path, JSON.generate(document))
+      expect(Wireless::CLI.run([ "review", "--batch", root ], out: StringIO.new, error: StringIO.new)).to eq(2)
+      expect(File.exist?(File.join(root, "reviews"))).to be(false)
+      document[:snapshot].delete(:target)
+      File.write(path, JSON.generate(document))
+      expect(Wireless::CLI.run([ "review", "--batch", root ], out: StringIO.new, error: StringIO.new)).to eq(2)
+      expect(File.exist?(File.join(root, "reviews"))).to be(false)
+      document[:snapshot][:target] = { host: "192.0.2.1" }
+      File.write(path, JSON.generate(document))
+      File.write(File.join(root, "devices", "duplicate.json"), JSON.generate(document))
+      expect(Wireless::CLI.run([ "review", "--batch", root ], out: StringIO.new, error: StringIO.new)).to eq(2)
+      expect(File.exist?(File.join(root, "reviews"))).to be(false)
+    end
+  end
+
   it "does not export executable plans from partial or ambiguous configuration even with supplied advice" do
     observation = Wireless::Config.new.parse("wlan service-template A\n cipher-suite tkip ccmp\n security-ie wpa rsn\n service-template enable\nreturn\n", complete: true)
     expect(observation).to be_complete
     document = JSON.parse(JSON.generate(device: { name: "AC", host: "192.0.2.1", platform: "h3c_wireless" },
-      snapshot: { dimensions: { configuration: observation.to_h } }))
+      snapshot: { target: { host: "192.0.2.1" }, dimensions: { configuration: observation.to_h } }))
     advice = Wireless::Recommendations.new(document).call
     expect(advice[:items]).to include(include(status: "candidate"))
     [ [ "partial", observation.records ], [ "complete", observation.records * 2 ] ].each_with_index do |(status, records), index|
@@ -34,11 +67,11 @@ RSpec.describe "Wireless offline review" do
       observation = Wireless::Config.new.parse(text, complete: true)
       expect(observation).to be_complete
       document = JSON.parse(JSON.generate(device: { name: "AC", host: "192.0.2.1", platform: "h3c_wireless" },
-        snapshot: { dimensions: { configuration: observation.to_h } }))
-      original = Wireless::ChangePlan.fingerprint(document.dig("snapshot", "dimensions", "configuration", "records", 0))
+        snapshot: { target: { host: "192.0.2.1" }, dimensions: { configuration: observation.to_h } }))
+      original = CtxRunner::Fingerprint.call(document.dig("snapshot", "dimensions", "configuration", "records", 0))
       report.write_review(document, basename: "first", source: "input", source_sha256: "a" * 64)
       document["snapshot"]["dimensions"]["configuration"]["records"][0]["service_templates"][0]["ssid"] = "changed"
-      current = Wireless::ChangePlan.fingerprint(document.dig("snapshot", "dimensions", "configuration", "records", 0))
+      current = CtxRunner::Fingerprint.call(document.dig("snapshot", "dimensions", "configuration", "records", 0))
       report.write_review(document, basename: "second", source: "input", source_sha256: "b" * 64)
 
       expect(current).not_to eq(original)
@@ -56,7 +89,7 @@ RSpec.describe "Wireless offline review" do
     Dir.mktmpdir do |root|
       Dir.mkdir(File.join(root, "devices"))
       observation = Wireless::Config.new.parse("wlan ap ap1 model WA6530\n radio 1\n  service-template missing vlan 10\n#\n", complete: true)
-      File.write(File.join(root, "devices", "ac.json"), JSON.generate(device: { name: "AC", host: "192.0.2.1", platform: "h3c_wireless" }, snapshot: { dimensions: { configuration: observation.to_h } }))
+      File.write(File.join(root, "devices", "ac.json"), JSON.generate(device: { name: "AC", host: "192.0.2.1", platform: "h3c_wireless" }, snapshot: { target: { host: "192.0.2.1" }, dimensions: { configuration: observation.to_h } }))
       error = StringIO.new
       expect(Wireless::CLI.run([ "review", "--batch", root ], error: error, out: StringIO.new)).to eq(0), error.string
       advice = JSON.parse(File.read(Dir[File.join(root, "reviews", "*", "recommendations", "*.json")].fetch(0)))
@@ -70,7 +103,7 @@ RSpec.describe "Wireless offline review" do
       Dir.mkdir(batch)
       Dir.mkdir(File.join(batch, "devices"))
       source = File.join(batch, "devices", "leaf.json")
-      body = JSON.generate(device: { name: "LEAF", host: "192.0.2.1", platform: "h3c_wireless" }, snapshot: { dimensions: { configuration: { status: "partial", records: [], issues: [] } } })
+      body = JSON.generate(device: { name: "LEAF", host: "192.0.2.1", platform: "h3c_wireless" }, snapshot: { target: { host: "192.0.2.1" }, dimensions: { configuration: { status: "partial", records: [], issues: [] } } })
       File.write(source, body)
       out, error = StringIO.new, StringIO.new
       status = Wireless::CLI.run([ "review", "--batch", batch, "--output", File.join(root, "out") ], out: out, error: error)
@@ -121,6 +154,8 @@ RSpec.describe "Wireless offline review" do
     Dir.mktmpdir do |root|
       report = Wireless::CLI::Report.new(File.join(root, "out"))
       folder = File.join(report.directory, "recommendations")
+      allow(File).to receive(:open).and_call_original
+      expect(File).to receive(:open).with(report.directory, File::RDONLY | File::NOFOLLOW).at_least(:once).and_call_original
       # 在第一次 mkdir 的边界插入另一 worker 的创建，确定性重现检查后的竞态。
       allow(Dir).to receive(:mkdir).and_wrap_original do |original, path, *args, **kwargs|
         original.call(path, *args, **kwargs) if path == folder && !File.directory?(folder)
@@ -138,7 +173,7 @@ RSpec.describe "Wireless offline review" do
   it "rejects malformed nested observations through the normal error channel" do
     Dir.mktmpdir do |root|
       Dir.mkdir(File.join(root, "devices"))
-      File.write(File.join(root, "devices", "bad.json"), JSON.generate(device: { name: "test", host: "192.0.2.1" }, snapshot: { dimensions: { configuration: { status: "partial", records: [], issues: "private-password" } } }))
+      File.write(File.join(root, "devices", "bad.json"), JSON.generate(device: { name: "test", host: "192.0.2.1" }, snapshot: { target: { host: "192.0.2.1" }, dimensions: { configuration: { status: "partial", records: [], issues: "private-password" } } }))
       error = StringIO.new
       expect(Wireless::CLI.run([ "review", "--batch", root ], error: error, out: StringIO.new)).to eq(2)
       expect(error.string).not_to include("private-password")
