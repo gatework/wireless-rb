@@ -11,7 +11,7 @@ ruby bin/wireless.rb
 
 也可在 `bin/` 运行 `ruby wireless.rb`；从其他目录指定脚本绝对路径也可。入口直接加载相邻 `lib/`，沿用已选择的 RubyGems/Bundler，不搜索相邻源码。脚本默认读取 Netdisco 清单并采集已选控制器，不扫描地址。
 
-首次没有配置时执行 `ruby bin/wireless.rb --init --non-interactive`，再填写用户配置目录中的 `.env` 与 `wireless.yml`。已有文件保留。配置加载及联网使用含 `Config` 的可选 `net-connector >= 0.16.0`，环境文件解析由该依赖提供；本仓库 Gemfile 已声明。
+首次没有配置时执行 `ruby bin/wireless.rb --init --non-interactive`，再填写用户配置目录中的 `.env` 与 `wireless.yml`。已有文件保留。配置加载及联网使用含 `Config` 的可选 `net-connector >= 0.17.1`，环境文件解析由该依赖提供；本仓库 Gemfile 已声明。
 
 安装 gem 后仍使用 `wireless collect` / `wireless parse`，或源码统一入口 `ruby bin/wireless collect`。两者调用同一采集与配置实现，报告默认位于启动目录 `wireless-reports/`。
 
@@ -197,3 +197,7 @@ wireless collect --hosts 192.0.2.0/24 --name edge --exclude-name spare --model '
 IP 支持单地址、CIDR、范围；名称及型号支持 contains（默认）、prefix、glob，不区分大小写。`--vendor`/`--exclude-vendor` 使用连接器平台标识（如 cisco_nxos、h3c、h3c_wireless、huawei），不是原始厂商标签。同字段条件为 OR，跨字段为 AND，排除优先。缺失型号不命中包含规则。`--model`/`--exclude-model`、`--name-match`/`--model-match` 可组合；筛选只选择已有清单，不扫描地址、不扩大平台支持范围。
 
 YAML 顶层对应 hosts/exclude_hosts、names/exclude_names、vendors/exclude_vendors、models/exclude_models、name_match/model_match。Netdisco inventory 段使用 include_hosts/include_names/include_vendors/include_models 及对应 exclude 字段。
+
+## ctx_cli 公共入口
+
+分发、公共选项、配置初始化、离线输入输出、终端确认和采集入口由 ctx_cli 组合提供；领域规则与 ctx_runner 业务状态保持各自职责。`CTX_CLI_PATH=../ctx_cli bundle exec rake` 用于源码联调；普通入口先安装 ctx_cli 候选包。

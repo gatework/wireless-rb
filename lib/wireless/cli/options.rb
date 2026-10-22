@@ -1,11 +1,12 @@
 # frozen_string_literal: true
 
 require "optparse"
+require "ctx_cli/options"
+require "ctx_cli/terminal"
+require "ctx_cli/initialization"
 require "net/connector/inventory/filters"
 require "yaml"
 require "ipaddr"
-require "fileutils"
-require "tempfile"
 
 module Wireless
   module CLI
@@ -53,7 +54,7 @@ module Wireless
 
       # 自动化拒绝强制问答；帮助分支无需检查终端或消费输入。
       def validate_interaction!(input:, error:)
-        if flags[:interactive] && !(input.tty? && error.tty?)
+        if flags[:interactive] && !CtxCli::Terminal.tty?(input, error)
           raise ArgumentError, "--interactive 需要交互终端；自动化请使用 --init --non-interactive"
         end
       end
@@ -108,7 +109,7 @@ module Wireless
         @inventory_public = schema.from_environment(defaults.merge(overrides), sections: sections)
         @netdisco_settings = Net::Connector::Netdisco::Settings.new(env: environment, defaults: defaults, overrides: overrides).for_run(mode: :inventory)
       rescue LoadError
-        raise LoadError, "Netdisco 清单需要 net-connector >= 0.17.0；请安装项目依赖", cause: nil
+        raise LoadError, "Netdisco 清单需要 net-connector >= 0.17.1；请安装项目依赖", cause: nil
       end
 
       # 外部清单同样按文件来源解析路径，并在预检时固定本批配置。
@@ -147,22 +148,11 @@ module Wireless
         end
         overrides_parallel = @overrides.key?("parallel") || parallel_source&.fetch("WIRELESS_PARALLEL", nil)
         document = overrides_parallel ? values : values.reject { |key, _| key == "parallel" }
-        template = template.lines.select { |line| line.start_with?("#") }.join +
+        template = template.lines("\n").select { |line| line.start_with?("#") }.join("") +
           Net::Connector::Config.dump(document, name: "wireless", path: config_loader.init_config)
         { config_loader.init_config => template, config_loader.init_env_file => File.read(File.join(__dir__, "templates/env.example")) }.each do |path, body|
-          FileUtils.mkdir_p(File.dirname(path), mode: 0o700)
-          begin
-            Tempfile.create([ ".wireless-init-", ".tmp" ], File.dirname(path)) do |file|
-              file.chmod(0o600)
-              file.write(body)
-              file.flush
-              file.fsync
-              File.link(file.path, path)
-            end
-            @out.puts "已创建：#{path}"
-          rescue Errno::EEXIST
-            @out.puts "已保留：#{path}"
-          end
+          status = CtxCli::Initialization.new(prefix: ".wireless-init-").create(path: path, contents: body)
+          @out.puts "#{status == :created ? '已创建' : '已保留'}：#{path}"
         end
         @out.puts "请检查配置及凭据后再次运行；本次未读取清单、未连接设备。"
       end
@@ -171,10 +161,10 @@ module Wireless
       def missing?(input:, error:)
         config_loader.load
         return false unless config_loader.missing?
-        if input.tty? && error.tty? && flags[:interactive] != false
-          error.print "配置不存在：#{config}；是否创建配置与环境模板？[y/N] "
-          error.flush
-          if input.gets&.strip&.match?(/\Ay(?:es)?\z/i)
+        terminal = CtxCli::Terminal.new(input: input, out: error)
+        if terminal.tty? && flags[:interactive] != false
+          answer = terminal.question("配置不存在：#{config}；是否创建配置与环境模板？[y/N] ")
+          if answer&.match?(/\Ay(?:es)?\z/i)
             initialize_files
             return true
           end
@@ -210,10 +200,14 @@ module Wireless
       def parser
         OptionParser.new do |p|
           p.banner = "用法：#{@command} [选项]（只读 WIRELESS 采集）"
-          p.on("--config FILE", "显式 YAML 最后叠加于自动发现的配置") { |v| @config = File.expand_path(v, @cwd) }
-          p.on("--env-file FILE", "显式环境文件最后叠加；进程环境优先") { |v| @env_file = File.expand_path(v, @cwd) }
-          p.on("-p", "--parallel N", Integer, "设备并发 1～500；继承 NC_PARALLEL，未配置时 4") { |v| @overrides["parallel"] = v }
-          p.on("--directory DIR", "按设备保存报告的目录") { |v| @overrides["directory"] = File.expand_path(v, @cwd) }
+          CtxCli::Options.configuration(p, parallel_help: "设备并发 1～500；继承 NC_PARALLEL，未配置时 4") do |key, value|
+            case key
+            when :config then @config = File.expand_path(value, @cwd)
+            when :env_file then @env_file = File.expand_path(value, @cwd)
+            when :directory then @overrides["directory"] = File.expand_path(value, @cwd)
+            when :parallel then @overrides["parallel"] = value
+            end
+          end
           p.on("--platform NAME", "默认平台 h3c / h3c_wireless / huawei") { |v| @overrides["platform"] = v }
           p.on("--ap-name LIST", "LLDP 仅选择指定 AP 名称，逗号分隔") { |v| (@overrides["ap_names"] ||= []).concat(list(v)) }
           p.on("--dimensions LIST", "逗号分隔维度；--help 查看支持项") { |v| @overrides["dimensions"] = list(v) }
@@ -224,22 +218,16 @@ module Wireless
               @overrides[key] = value
             end
           end
-          p.on("--init", "创建缺失配置和环境模板后退出；已有文件不覆盖") { flags[:init] = true }
-          p.on("--interactive", "缺少配置时询问是否创建；要求真实终端") { flags[:interactive] = true }
-          p.on("--non-interactive", "禁用问答；创建文件须同时指定 --init") { flags[:interactive] = false }
+          CtxCli::Options.initialization(p, flags)
           p.on("--plan", "--inventory-only", "预览筛选清单，不连接设备") { flags[:inventory_only] = true }
           p.on("--cache-only", "只读已验证清单缓存") { inventory_override("cache_mode", "only") }
           p.on("--refresh-inventory", "强制刷新清单，失败按缓存策略处理") { inventory_override("cache_mode", "refresh") }
           p.on("--cache-mode MODE", %w[prefer only refresh], "清单缓存 prefer / only / refresh") { |v| inventory_override("cache_mode", v) }
           p.on("--source SOURCE", %w[http postgres], "清单来源 http / postgres") { |v| @inventory_overrides["source"] = v }
           p.on("--show-config", "查看公开有效配置") { flags[:show_config] = true }
-          p.on("--json", "stdout 输出 JSON；默认显示可读摘要") { flags[:json] = true }
-          p.on("--quiet", "--no-progress", "关闭 stderr 进度，可配合 --json") { flags[:quiet] = true }
+          CtxCli::Options.output(p, flags)
           p.on("--[no-]scripts", "可选导出配置建议，默认仅诊断") { |value| flags[:scripts] = value }
-          p.on("--verbose", "显示逐台结果及安全命令事件") { flags[:verbose] = true }
-          p.on("-h", "--help", "查看选项帮助") { flags[:help] = true }
-          p.on("--help-all", "查看全部选项、路径与环境约定") { flags[:help_all] = true }
-          p.on("--examples", "查看常用命令范例，不执行任务") { flags[:examples] = true }
+          CtxCli::Options.information(p, flags)
           p.separator "维度：#{Wireless::SUPPORTED_DIMENSIONS.join(', ')}"
           p.separator "默认按各设备平台采集全部控制器维度；AP LLDP 须显式请求，Huawei 当前支持 access_points、clients。"
           p.separator "优先级：CLI > 进程环境 > YAML > .env > 默认。退出码：0 完整/预览；1 未完成/无目标；2 参数/持久化错误；130 取消。"
@@ -247,11 +235,7 @@ module Wireless
       end
 
       # 列表中的空项属于输入错误，不能被静默删掉。
-      def list(value)
-        values = value.split(",", -1).map(&:strip)
-        raise ArgumentError, "列表不能有空项" if values.any?(&:empty?)
-        values
-      end
+      def list(value) = CtxCli::Options.list(value)
 
       # 互斥缓存请求不能被参数出现顺序静默覆盖。
       def inventory_override(key, value)
@@ -270,7 +254,7 @@ module Wireless
             path_literals: { "netdisco.db_sslrootcert" => [ "system" ], "ND_DB_SSLROOTCERT" => [ "system" ] }, **@discovery)
         end
       rescue LoadError
-        raise LoadError, "统一配置加载需要 net-connector >= 0.17.0；请安装项目依赖", cause: nil
+        raise LoadError, "统一配置加载需要 net-connector >= 0.17.1；请安装项目依赖", cause: nil
       end
 
       # 各环境层仅编码宿主支持的公开字段，凭据始终留在环境快照。
