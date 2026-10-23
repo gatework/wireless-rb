@@ -50,16 +50,16 @@ module Wireless
       def finish(results, interrupted: false, requested: [], report_error: nil, execution_error: nil, output_error: nil)
         @report.finish(results, interrupted: interrupted, requested: requested, report_error: report_error,
           execution_error: execution_error, output_error: output_error) do |summary|
-          pending = summary.fetch(:pending)
-          text = [ "WIRELESS 证据：#{summary.fetch(:status)}；完成 #{results.size} 台", "分类：#{summary.fetch(:counts)}", "证据完整性不代表 无线网络健康。" ]
+          pending = summary.fetch("pending")
+          text = [ "WIRELESS 证据：#{summary.fetch('status')}；完成 #{summary.fetch('completed')} 台", "分类：#{summary.fetch('counts')}", "证据完整性不代表 无线网络健康。" ]
           text << "逐设备修复建议：recommendations/；所有候选配置仅供审阅，未执行。"
           text << "批次报告状态：参见 summary.json；文本中的证据状态不确认报告发布完成。"
-          text << "报告错误：#{report_error}" if report_error
-          text << "执行错误：#{execution_error}" if execution_error
-          text << "进度输出错误：#{output_error[:error_type]}；设备结果已保留" if output_error
-          results.each do |r|
-            saved = r[:report_saved] == true ? "已保存" : "保存未确认"
-            text << "#{r[:device]['host']}\t#{r[:device]['name']}\t#{r[:status]}\t#{saved}\t#{r[:error]}"
+          text << "报告错误：#{summary['report_error']}" if summary["report_error"]
+          text << "执行错误：#{summary['execution_error']}" if summary["execution_error"]
+          text << "进度输出错误：#{summary['output_error']['error_type']}；设备结果已保留" if summary["output_error"]
+          summary.fetch("devices").each do |r|
+            saved = r["report_saved"] == true ? "已保存" : "保存未确认"
+            text << "#{r['device']['host']}\t#{r['device']['name']}\t#{r['status']}\t#{saved}\t#{r['error']}"
           end
           pending.each { |device| text << "#{device['host']}\t#{device['name']}\t未采集" }
           text.join("\n") + "\n"

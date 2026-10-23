@@ -18,7 +18,7 @@ ruby bin/wireless collect --plan
 ruby bin/wireless parse --dimension access_points --file aps.txt --complete
 ```
 
-源码直接运行 `ruby bin/wireless.rb`，与 `wireless collect` 共用逐层配置发现：系统、用户配置目录、入口脚本目录、启动目录，显式配置最后叠加。值优先级为 CLI > 进程环境 > YAML > .env > 默认。初始化写用户配置目录或显式路径，报告默认写启动目录 `wireless-reports/`。支持 H3C 与 Huawei；AP LLDP 须显式启用并使用独立 AP 凭据。宿主配置及采集使用含 `Config` 的可选 `net-connector >= 0.16.0`，环境文件解析由该依赖提供；纯解析仍独立。详见[命令行使用说明](bin/README.md)。
+源码直接运行 `ruby bin/wireless.rb`，与 `wireless collect` 共用逐层配置发现：系统、用户配置目录、入口脚本目录、启动目录，显式配置最后叠加。值优先级为 CLI > 进程环境 > YAML > .env > 默认。初始化写用户配置目录或显式路径，报告默认写启动目录 `wireless-reports/`。支持 H3C 与 Huawei；AP LLDP 须显式启用并使用独立 AP 凭据。宿主配置及采集使用含 `Config` 的可选 `net-connector >= 0.18.0`，环境文件解析由该依赖提供；纯解析仍独立。详见[命令行使用说明](bin/README.md)。
 
 
 ## 能力

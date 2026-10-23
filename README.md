@@ -18,7 +18,7 @@ ruby bin/wireless collect --plan
 ruby bin/wireless parse --dimension access_points --file aps.txt --complete
 ```
 
-The CLI follows VXLAN conventions for layered configuration, inventory filtering, concurrency, progress, private per-device reports and exit codes. Collection supports H3C and Huawei; AP LLDP is explicit and uses separate AP credentials. Host configuration and collection require optional `net-connector >= 0.17.1` with `Config`; environment-file parsing is provided by that dependency. Parser installation stays independent of transport. Both `wireless collect` and `ruby bin/wireless.rb` discover system, user, script-directory and invocation-directory files, then overlay explicit files. Values follow CLI > process environment > YAML > .env > defaults. Initialization writes to the user configuration directory or explicit paths; reports default to `wireless-reports/` in the invocation directory. See the [CLI guide](bin/README.md).
+The CLI follows VXLAN conventions for layered configuration, inventory filtering, concurrency, progress, private per-device reports and exit codes. Collection supports H3C and Huawei; AP LLDP is explicit and uses separate AP credentials. Host configuration and collection require optional `net-connector >= 0.18.0` with `Config`; environment-file parsing is provided by that dependency. Parser installation stays independent of transport. Both `wireless collect` and `ruby bin/wireless.rb` discover system, user, script-directory and invocation-directory files, then overlay explicit files. Values follow CLI > process environment > YAML > .env > defaults. Initialization writes to the user configuration directory or explicit paths; reports default to `wireless-reports/` in the invocation directory. See the [CLI guide](bin/README.md).
 
 
 ## Features
@@ -38,7 +38,7 @@ gem "wireless-rb", require: "wireless"
 
 Then run `bundle install`, or install directly with `gem install wireless-rb`. The require path is `wireless` and the public namespace is `Wireless`; package names and Ruby namespaces are intentionally separate.
 
-Runtime dependencies include [`ctx_parser`](https://github.com/gatework/ctx_parser) and [`ctx_driver`](https://github.com/gatework/ctx_driver), without version constraints in the gemspec. Offline parsing and injected controller collection do not install or load `net-connector`. Applications should commit their own `Gemfile.lock` to make deployments reproducible. No Rails boot or sibling checkout paths are required.
+Runtime dependencies include [`ctx_parser`](https://github.com/gatework/ctx_parser) and [`ctx_driver`](https://github.com/gatework/ctx_driver), with required API minimum versions declared in the gemspec. Offline parsing and injected controller collection do not install or load `net-connector`. Applications should commit their own `Gemfile.lock` to make deployments reproducible. No Rails boot or sibling checkout paths are required.
 
 Release artifacts and checksums are available from [GitHub Releases](https://github.com/gatework/wireless-rb/releases). Check [RubyGems](https://rubygems.org/gems/wireless-rb) for published versions.
 

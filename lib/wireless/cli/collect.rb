@@ -35,7 +35,7 @@ module Wireless
       def load_network
         require "net/connector"
       rescue LoadError
-        raise LoadError, "联网采集需要 net-connector >= 0.16.0；请在宿主 Gemfile 添加或 gem install net-connector", cause: nil
+        raise LoadError, "联网采集需要 net-connector >= 0.18.0；请在宿主 Gemfile 添加或 gem install net-connector", cause: nil
       end
 
       # YAML 静态设备或显式 Netdisco 来源二选一；所有重复地址在连接前拒绝。

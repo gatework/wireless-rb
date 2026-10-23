@@ -113,7 +113,7 @@ module Wireless
         { username: username, password: env["NC_H3C_WIRELESS_PASSWORD"] || env["NC_DEVICE_PASSWORD"], enable_password: env["NC_ENABLE_PASSWORD"],
           port: options[:port], host_key_policy: "strict", command_timeout: 60, login_timeout: 15 }
       rescue LoadError
-        raise LoadError, "统一凭据加载需要 net-connector >= 0.16.0；请安装项目依赖", cause: nil
+        raise LoadError, "统一凭据加载需要 net-connector >= 0.18.0；请安装项目依赖", cause: nil
       end
 
       # 原生会话只打开一次，读写处于同一操作租约中。

@@ -161,7 +161,7 @@ RSpec.describe Wireless::CLI::Collect do
     @error.define_singleton_method(:tty?) { true }
     before = Thread.list
     factory = lambda do |_device, settings|
-      expect(@error.string).to include("登录 1")
+      expect(@error.string).to include("Logging in 1")
       expect(settings.fetch(:on_event)).to respond_to(:call)
       connector = double("connector", platform: :h3c)
       allow(connector).to receive(:open).and_yield(WirelessFixtureSession.new(:h3c))
@@ -169,7 +169,7 @@ RSpec.describe Wireless::CLI::Collect do
     end
     expect(run_cli("--json", factory: factory)).to eq(0)
     expect(JSON.parse(@out.string).fetch("counts")).to eq("complete" => 1)
-    expect(@error.string).to include("清单 1 台；本次 1 台；跳过 0 台；并发 4", "1/1 100%", "\e[2K", "批次结束：成功 1", "文本报告：")
+    expect(@error.string).to include("Inventory 1 devices; selected 1; skipped 0 devices; concurrency 4", "1/1 100%", "\e[2K", "Batch finished: succeeded 1", "Text report: ")
     expect(Thread.list - before).to be_empty
   end
 
@@ -177,11 +177,11 @@ RSpec.describe Wireless::CLI::Collect do
     config
     expect(run_cli(factory: ->(*) { raise IOError, "private diagnostic" })).to eq(1)
     expect(@out.string).to be_empty
-    expect(@error.string).to include("192.0.2.10  未完成", "未完成分类：", "批次结束：成功 0，部分成功 0，失败 1，跳过 0")
+    expect(@error.string).to include("192.0.2.10  Incomplete", "Incomplete categories: ", "Batch finished: succeeded 0, partial 0, failed 1, skipped 0")
     expect(@error.string).not_to include("private diagnostic", "已采集 1 台 |")
   end
 
-  [ "配置：", "批次结束：" ].each do |stage|
+  [ "Configuration: ", "Batch finished: " ].each do |stage|
     it "preserves collected results and records a display failure at #{stage}" do
       config
       writer = @error.method(:write)
