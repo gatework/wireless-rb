@@ -95,42 +95,45 @@ Dir.mktmpdir("gem-install-") do |home|
     abort "Missing executable" unless loaded.executables == [ "wireless" ]
     require "fileutils"
     FileUtils.chmod_R("a-w", loaded.full_gem_path)
-    command = File.join(ENV.fetch("GEM_HOME"), "bin/wireless")
-    system(command, "--help", exception: true)
-    system(command, "--version", exception: true)
-    system(command, "review", "--help", exception: true)
-    system(command, "apply", "--help", exception: true)
-    require "json"
-    FileUtils.mkdir_p("saved/devices")
-    File.write("saved/devices/ac.json", JSON.generate(device: { name: "AC", host: "192.0.2.1", platform: "h3c_wireless" }, snapshot: { dimensions: { configuration: configuration.to_h } }))
-    system(command, "review", "--batch", "saved", "--output", "reviews", exception: true)
-    abort "Missing installed review artifacts" unless Dir["reviews/*/recommendations/*.txt"].size == 1 && Dir["reviews/*/review.txt"].size == 1
-    abort "Unexpected Markdown review artifacts" unless Dir["reviews/**/*.md"].empty?
+    begin
+      command = File.join(ENV.fetch("GEM_HOME"), "bin/wireless")
+      system(command, "--help", exception: true)
+      system(command, "--version", exception: true)
+      system(command, "review", "--help", exception: true)
+      system(command, "apply", "--help", exception: true)
+      require "json"
+      FileUtils.mkdir_p("saved/devices")
+      File.write("saved/devices/ac.json", JSON.generate(device: { name: "AC", host: "192.0.2.1", platform: "h3c_wireless" }, snapshot: { target: { host: "192.0.2.1" }, dimensions: { configuration: configuration.to_h } }))
+      system(command, "review", "--batch", "saved", "--output", "reviews", exception: true)
+      abort "Missing installed review artifacts" unless Dir["reviews/*/recommendations/*.txt"].size == 1 && Dir["reviews/*/review.txt"].size == 1
+      abort "Unexpected Markdown review artifacts" unless Dir["reviews/**/*.md"].empty?
 
-    system(command, "parse", "--help-all", exception: true)
-    File.write("aps.txt", "Total number of APs : 0\\n")
-    system(command, "parse", "--dimension", "access_points", "--complete", "--json", "--file", "aps.txt", exception: true)
-    # 纯解析与帮助已在没有连接器的隔离安装中完成，再安装宿主配置可选依赖。
-    expect_package = #{expect_artifact.inspect}
-    system(RbConfig.ruby, "-S", "gem", "install", expect_package, "--local", "--no-document", exception: true) if expect_package
-    connector_package = #{connector_artifact.inspect}
-    installation = connector_package ? [ connector_package, "--local" ] : [ "net-connector", "--version", "~> 0.17.1" ]
-    system(RbConfig.ruby, "-S", "gem", "install", *installation, "--no-document", exception: true)
-    system(command, "collect", "--help-all", exception: true)
-    system(command, "collect", "--init", "--non-interactive", exception: true)
-    config = File.join(ENV.fetch("XDG_CONFIG_HOME"), "net-connector/wireless.yml")
-    env_file = File.join(ENV.fetch("XDG_CONFIG_HOME"), "net-connector/.env")
-    abort "Config missing" unless File.file?(config) && File.file?(env_file)
-    abort "Initialization wrote into cwd" if File.exist?("wireless.yml") || File.exist?(".env")
-    abort "Unsafe config permissions" unless File.stat(config).mode & 0o777 == 0o600
-    require "yaml"
-    abort "Unexpected report default" unless YAML.safe_load_file(config).fetch("directory") == File.join(Dir.pwd, "wireless-reports")
-    File.write(config, YAML.dump("devices" => [ { "host" => "192.0.2.10" } ]))
-    system(command, "collect", "--plan", "--no-progress", exception: true)
-    system(command, "collect", "--plan", "--env-file", "absent.env")
-    abort "Missing explicit environment file accepted" unless $?.exitstatus == 2
-    load File.join(loaded.full_gem_path, "examples/offline.rb")
-    FileUtils.chmod_R("u+w", loaded.full_gem_path)
+      system(command, "parse", "--help-all", exception: true)
+      File.write("aps.txt", "Total number of APs : 0\\n")
+      system(command, "parse", "--dimension", "access_points", "--complete", "--json", "--file", "aps.txt", exception: true)
+      # 纯解析与帮助已在没有连接器的隔离安装中完成，再安装宿主配置可选依赖。
+      expect_package = #{expect_artifact.inspect}
+      system(RbConfig.ruby, "-S", "gem", "install", expect_package, "--local", "--no-document", exception: true) if expect_package
+      connector_package = #{connector_artifact.inspect}
+      installation = connector_package ? [ connector_package, "--local" ] : [ "net-connector", "--version", "~> 0.17.1" ]
+      system(RbConfig.ruby, "-S", "gem", "install", *installation, "--no-document", exception: true)
+      system(command, "collect", "--help-all", exception: true)
+      system(command, "collect", "--init", "--non-interactive", exception: true)
+      config = File.join(ENV.fetch("XDG_CONFIG_HOME"), "net-connector/wireless.yml")
+      env_file = File.join(ENV.fetch("XDG_CONFIG_HOME"), "net-connector/.env")
+      abort "Config missing" unless File.file?(config) && File.file?(env_file)
+      abort "Initialization wrote into cwd" if File.exist?("wireless.yml") || File.exist?(".env")
+      abort "Unsafe config permissions" unless File.stat(config).mode & 0o777 == 0o600
+      require "yaml"
+      abort "Unexpected report default" unless YAML.safe_load_file(config).fetch("directory") == File.join(Dir.pwd, "wireless-reports")
+      File.write(config, YAML.dump("devices" => [ { "host" => "192.0.2.10" } ]))
+      system(command, "collect", "--plan", "--no-progress", exception: true)
+      system(command, "collect", "--plan", "--env-file", "absent.env")
+      abort "Missing explicit environment file accepted" unless $?.exitstatus == 2
+      load File.join(loaded.full_gem_path, "examples/offline.rb")
+    ensure
+      FileUtils.chmod_R("u+w", loaded.full_gem_path)
+    end
   RUBY
   system(env, ruby, "-e", check, chdir: home, exception: true)
 end
