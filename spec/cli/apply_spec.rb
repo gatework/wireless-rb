@@ -2,6 +2,7 @@
 
 require_relative "../spec_helper"
 require "wireless/cli"
+require "wireless/cli/apply"
 require "wireless/cli/report"
 require "wireless/change_plan"
 require "tmpdir"
@@ -25,7 +26,7 @@ RSpec.describe "Wireless interactive apply" do
     stream
   end
 
-  def exercise(confirmation: true, tty: true, drift: false, fail_write: false, altered: false, persistence_failure: false, failed_readback: false, checkpoint_failure: false, file_credentials: false, callback_count: 1)
+  def exercise(confirmation: true, tty: true, drift: false, fail_write: false, altered: false, persistence_failure: false, failed_readback: false, checkpoint_failure: false, file_credentials: false, callback_count: 1, broken_error: false, interrupted_write: false)
     Dir.mktmpdir do |root|
       File.write(File.join(root, ".env"), "NC_DEVICE_USERNAME=file-user\nNC_DEVICE_PASSWORD=private-file-secret\n") if file_credentials
       process_environment = file_credentials ? { "NC_DEVICE_USERNAME" => "process-user" } : { "NC_DEVICE_USERNAME" => "test" }
@@ -38,6 +39,7 @@ RSpec.describe "Wireless interactive apply" do
       token = "APPLY 192.0.2.1 #{Digest::SHA256.file(path).hexdigest[0, 12]}"
       input = tty ? terminal(confirmation ? "#{token}\n" : "no\n") : StringIO.new("#{token}\n")
       out, error = terminal, terminal
+      error.define_singleton_method(:puts) { |*| raise IOError, "private-diagnostic-failure" } if broken_error
       writes, connections, reads = [], [], []
       before, after = config, failed_readback ? config : after_config
       session = Object.new
@@ -47,6 +49,7 @@ RSpec.describe "Wireless interactive apply" do
       end
       session.define_singleton_method(:write) do |command|
         writes << command
+        raise Interrupt, "private-interruption-detail" if interrupted_write
         raise IOError, "private-error-detail" if fail_write
         true
       end
@@ -70,6 +73,40 @@ RSpec.describe "Wireless interactive apply" do
       journals = Dir[File.join(root, "execution", "*", "execution.json")].map { |file| JSON.parse(File.read(file)) }
       { status: status, reads: reads, writes: writes, connections: connections, journals: journals, error: error.string, credentials: credentials, environment: process_environment }
     end
+  end
+
+  it "returns a preflight failure without connecting when stderr is unavailable" do
+    expect(exercise(tty: false, broken_error: true)).to include(status: 2, connections: [], writes: [], journals: [])
+  end
+
+  it "retains intent failure when journal recovery and stderr both fail" do
+    expect(exercise(persistence_failure: true, broken_error: true)).to include(status: 2, connections: [], writes: [], journals: [])
+  end
+
+  it "keeps a failed command uncertain without replay when stderr is unavailable" do
+    result = exercise(fail_write: true, broken_error: true)
+    expect(result[:status]).to eq(2)
+    expect(result[:writes].size).to eq(1)
+    expect(result[:journals].last).to include("status" => "uncertain", "pending_command" => 0, "steps" => [])
+  end
+
+  it "preserves cancellation and its journal when stderr is unavailable" do
+    result = exercise(interrupted_write: true, broken_error: true)
+    expect(result[:status]).to eq(130)
+    expect(result[:writes].size).to eq(1)
+    expect(result[:journals].last).to include("status" => "uncertain", "error" => "interrupted", "pending_command" => 0)
+  end
+
+  it "shows help without consuming input and rejects unexpected positional arguments" do
+    input, out, error = StringIO.new("unread\n"), StringIO.new, StringIO.new
+    connections = []
+    factory = ->(*) { connections << true }
+    cli = Wireless::CLI::Apply.new(env: {}, discovery: { directories: [] }, input: input, out: out, error: error, connector_factory: factory)
+    expect(cli.run([ "--help" ])).to eq(0)
+    expect(out.string).to include("--plan", "--port")
+    expect(cli.run([ "--help", "unexpected" ])).to eq(2)
+    expect(input.pos).to eq(0)
+    expect(connections).to be_empty
   end
 
   it "rejects an oversized plan before confirmation or connection" do

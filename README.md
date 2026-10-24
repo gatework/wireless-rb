@@ -38,7 +38,7 @@ gem "wireless-rb", require: "wireless"
 
 Then run `bundle install`, or install directly with `gem install wireless-rb`. The require path is `wireless` and the public namespace is `Wireless`; package names and Ruby namespaces are intentionally separate.
 
-Runtime dependencies include [`ctx_parser`](https://github.com/gatework/ctx_parser) and [`ctx_driver`](https://github.com/gatework/ctx_driver), with required API minimum versions declared in the gemspec. Offline parsing and injected controller collection do not install or load `net-connector`. Applications should commit their own `Gemfile.lock` to make deployments reproducible. No Rails boot or sibling checkout paths are required.
+Runtime dependencies include [`ctx_parser`](https://github.com/gatework/ctx_parser), [`ctx_driver`](https://github.com/gatework/ctx_driver), [`ctx_runner`](https://github.com/gatework/ctx_runner) and [`ctx_cli`](https://github.com/gatework/ctx_cli), without version constraints in the gemspec. Offline parsing and injected controller collection do not install or load `net-connector`. Applications should commit their own `Gemfile.lock` to make deployments reproducible. No Rails boot or sibling checkout paths are required.
 
 Release artifacts and checksums are available from [GitHub Releases](https://github.com/gatework/wireless-rb/releases). Check [RubyGems](https://rubygems.org/gems/wireless-rb) for published versions.
 
@@ -161,5 +161,7 @@ MIT. See [LICENSE](LICENSE).
 ## Remediation recommendations
 
 `wireless collect` 默认输出逐设备诊断，使用 `--scripts` 可选导出配置建议；`wireless review --batch DIR` 可离线补生成既有报告的候选配置、条件回退和只读验收命令。导出不会执行变更；独立 `apply --plan FILE` 必须在真实终端明确确认，配置漂移或失败即停止。详见[修复建议说明](docs/remediation.md)。
+
+Apply returns `2` on failure and `130` on interruption even if stderr cannot accept diagnostics. Existing execution journals retain uncertain device effects; commands are never replayed automatically. Unexpected positional arguments are rejected, including after `--help`.
 
 Offline review requires `snapshot.target.host` to match the canonical device host. Reports without target identity must be collected again; the unbound legacy format is no longer accepted.

@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
-require "optparse"
+require "ctx_cli/command"
 require "ctx_cli/terminal"
 require "ctx_cli/input"
+require "ctx_cli/output"
 require "json"
 require "ctx_runner/document"
 require "digest"
@@ -44,25 +45,25 @@ module Wireless
       # 注入连接工厂仅用于宿主集成和离线失败测试。
       def initialize(env: ENV, out: $stdout, error: $stderr, input: $stdin, connector_factory: nil, discovery: {})
         @env, @out, @error, @input, @factory, @discovery = env, out, error, input, connector_factory, discovery
+        @output = CtxCli::Output.new(out: out, error: error)
       end
 
       # 没有 --yes 或自动回退；零退出码只确认配置回读，不声称业务已验收。
       def run(argv)
         @store, @execution = nil, nil
-        options = { directory: File.join(Dir.pwd, "wireless-executions"), port: 22 }
-        parser = OptionParser.new do |p|
-          p.banner = "用法：wireless apply --plan FILE [--env-file FILE]（必须真实终端明确确认）"
+        command = CtxCli::Command.new(banner: "用法：wireless apply --plan FILE [--env-file FILE]（必须真实终端明确确认）",
+          defaults: { directory: File.join(Dir.pwd, "wireless-executions"), port: 22 }, out: @out) do |p, options|
           p.on("--plan FILE", "单设备类型化计划 *.plan.json") { |value| options[:plan] = value }
           p.on("--env-file FILE", "显式凭据文件，进程环境优先") { |value| options[:env_file] = value }
           p.on("--directory DIR", "私有执行日志目录") { |value| options[:directory] = value }
           p.on("--port N", Integer, "SSH 端口，默认 22") { |value| options[:port] = value }
           p.on("-h", "--help", "查看帮助，不连接设备") { options[:help] = true }
         end
-        rest = parser.parse(argv.dup)
-        return @out.puts(parser) || 0 if options[:help]
+        options = command.parse(argv)
+        return 0 if command.informational?
         terminal = CtxCli::Terminal.new(input: @input, out: @out)
         terminal.require_tty!(@error)
-        raise ArgumentError, "需要单个计划" unless rest.empty? && options[:plan] && options[:port].between?(1, 65_535)
+        raise ArgumentError, "需要单个计划" unless options[:plan] && options[:port].between?(1, 65_535)
         body = CtxCli::Input.read(path: options[:plan])
         plan = CtxParser::Immutable.copy(JSON.parse(body))
         change = validate_plan(plan)
@@ -83,11 +84,11 @@ module Wireless
         0
       rescue Interrupt
         report_journal_failure
-        @error.puts "操作中断；#{@execution&.started? ? '设备效果可能不完整，请先回读核对，禁止重放。' : '尚未下发业务配置。'}"
+        @output.diagnostic "操作中断；#{@execution&.started? ? '设备效果可能不完整，请先回读核对，禁止重放。' : '尚未下发业务配置。'}"
         130
       rescue StandardError, LoadError => error
         report_journal_failure
-        @error.puts "下发停止（#{error.class.name}）；#{@execution&.started? ? '效果未完整确认，先回读，不自动重放或回退。' : '未下发业务配置；检查终端、计划、凭据及当前配置是否仍匹配。'}"
+        @output.diagnostic "下发停止（#{error.class.name}）；#{@execution&.started? ? '效果未完整确认，先回读，不自动重放或回退。' : '未下发业务配置；检查终端、计划、凭据及当前配置是否仍匹配。'}"
         2
       end
 
@@ -128,8 +129,8 @@ module Wireless
       # 公共执行器保存失败状态；CLI 只呈现持久性尚未确认的诊断。
       def report_journal_failure
         return unless @execution&.journal_failed?
-        @error.puts "执行日志收尾未确认；保留已有检查点，禁止据此重放配置。"
-      rescue StandardError, Interrupt
+        @output.diagnostic "执行日志收尾未确认；保留已有检查点，禁止据此重放配置。"
+      rescue Interrupt
         nil
       end
     end
