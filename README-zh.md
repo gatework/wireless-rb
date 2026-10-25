@@ -1,5 +1,7 @@
 # wireless-rb
 
+控制器采集由 `Collector` 编排；独立的 `ApCollection` 负责 AP 选择、延迟读取凭据、LLDP 回执校验和覆盖度汇总，`ApSession` 继续负责嵌套传输租约。已有 `Collector#collect` 参数和返回结构保持兼容。按能力加载 `wireless/ap_collection` 后，可通过 `collect(session:, access_points:, credentials: nil, names: [])` 单独补充邻居证据；输入为名为 `:access_points` 的 `Wireless::Observation`，并显式注入 `ap_session_factory`。没有匹配 AP 时不访问凭据，每台 AP 的失败保留独立证据。
+
 [English](README.md) | [源码](https://github.com/gatework/wireless-rb) | [变更记录](CHANGELOG.md)
 
 以纯 Ruby 解析无线控制器配置和运行观察。厂商命令解析器建模 AP、Radio、客户端和服务配置，采集事实与库存持久化分开。

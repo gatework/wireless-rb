@@ -28,6 +28,8 @@ The CLI follows VXLAN conventions for layered configuration, inventory filtering
 - Shared command parsing with independent completeness for each resulting view.
 - Optional AP neighbor collection through the included net-connector AP-session adapter.
 
+`Collector` coordinates controller queries and their dependencies. `ApCollection` handles AP selection, lazy credential resolution, LLDP receipt validation and coverage aggregation; `ApSession` owns the nested transport operation. The existing `Collector#collect` API is unchanged. For independent enrichment, require `wireless/ap_collection` and call `collect(session:, access_points:, credentials: nil, names: [])` with an immutable `Wireless::Observation` named `:access_points` and an explicit `ap_session_factory`. No matching AP means no credential callback or AP login. Each failed AP retains its evidence without discarding other AP results.
+
 ## Installation
 
 Requires **Ruby 4.0.6 or newer**. Add this line to your application's `Gemfile`:

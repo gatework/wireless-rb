@@ -7,7 +7,7 @@
 - `H3c/Huawei::Profile` 声明命令与视图；各厂商 `parsers/` 保留 CLI 命令映射的名称、类和目录。
 - `H3c::Document` 保留来源与作用域；`ConfigurationBuilder` 组织实体、型号、Radio 和模板绑定；`RecordParser` 处理运行字段、身份和诊断。
 - `Fields`、`Terminal` 管理严格值转换与终端残留校验；`Config/RuntimeParser` 选择解析策略，不负责设备连接。
-- `Collector` 编排控制器查询与 AP 依赖；`ApSession` 处理 AP 转接，`ctx_driver` 保存回执证据，net-connector/expect-pty 管理底层对话与资源。
+- `Collector` 编排控制器查询与 AP 依赖；`ApCollection` 负责 AP 选择、延迟凭据、邻居回执与覆盖汇总；`ApSession` 处理 AP 转接，`ctx_driver` 保存回执证据，net-connector/expect-pty 管理底层对话与资源。
 - `Observation/Snapshot` 保存不可变事实；`Projection/Coverage` 区分资产应用与证据新鲜度；`Recommendations/ChangePlan` 分离建议和受支持的模板安全增量。
 - CLI parse/collect/review/apply 负责配置、私有报告、单项确认与执行日志，不在解析器中执行设备动作。
 

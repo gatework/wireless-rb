@@ -4,6 +4,11 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+## 0.6.2 (2026-10-25)
+
+- Extract AP neighbor selection, lazy credentials, receipt validation and coverage aggregation into ApCollection, preserving controller collection APIs and per-AP failure isolation.
+- Validate and snapshot standalone AP selections before external callbacks; keep invalid requests and unmatched selections from accessing credentials.
+
 ## 0.6.1 (2026-10-24)
 
 - Use shared CLI argument and diagnostic boundaries for apply; preserve exit status, cancellation and uncertain journals when stderr fails, without replaying commands.
