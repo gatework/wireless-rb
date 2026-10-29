@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "ctx_runner/evidence"
 require_relative "h3c/profile"
 require_relative "change_plan"
 
@@ -11,7 +12,7 @@ module Wireless
     # 输入为报告 JSON 的字符串键结构，避免实时与离线流程语义分叉。
     def initialize(document)
       @document = document
-      @dimensions = document.dig("snapshot", "dimensions") || {}
+      @dimensions = document.dig("snapshot", "observations") || {}
       @h3c = document.dig("device", "platform") == "h3c_wireless"
     end
 
@@ -28,7 +29,7 @@ module Wireless
       else
         items << item("platform_not_supported", "platform", "此平台尚未提供修复规则", evidence: @document.dig("device", "platform"), verify: []).merge(status: "blocked")
       end
-      { schema_version: 1, review_only: true, health_assessment: "not_performed", device: @document["device"],
+      { schema_version: CtxRunner::Evidence::VERSION, kind: "recommendations", review_only: true, health_assessment: "not_performed", device: @document["device"],
         observed_at: @document.dig("snapshot", "observed_at"), items: items, counts: items.map { |entry| entry[:status] }.tally }
     end
 

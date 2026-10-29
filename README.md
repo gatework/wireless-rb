@@ -162,7 +162,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## Remediation recommendations
 
-`wireless collect` 默认输出逐设备诊断，使用 `--scripts` 可选导出配置建议；`wireless review --batch DIR` 可离线补生成既有报告的候选配置、条件回退和只读验收命令。导出不会执行变更；独立 `apply --plan FILE` 必须在真实终端明确确认，配置漂移或失败即停止。详见[修复建议说明](docs/remediation.md)。
+`wireless collect` 默认输出逐设备诊断，使用 `--scripts` 可选导出配置建议；`wireless review --batch DIR` 可离线补生成既有报告的候选配置、条件回退和只读验收命令。导出不会执行变更；独立 `apply --plan FILE --item ID` 必须在真实终端明确确认，配置漂移或失败即停止。详见[修复建议说明](docs/remediation.md)。
 
 Apply returns `2` on failure and `130` on interruption even if stderr cannot accept diagnostics. Existing execution journals retain uncertain device effects; commands are never replayed automatically. Unexpected positional arguments are rejected, including after `--help`.
 
@@ -171,8 +171,10 @@ Offline review requires `snapshot.target.host` to match the canonical device hos
 
 ## API migration
 
-`RuntimeParser.new(platform:, model: nil)` fixes the platform for `parse(name, text, complete: false, command: nil)` and `parse_many(names, text, complete: false, command: nil)`. Snapshots use `observations:` and expose `observations` / `observation(name)`; the old Ruby `dimensions` member and Wireless `dimension` accessor are removed. Known missing dimensions return `not_requested`; unknown names raise `ArgumentError`. Persisted JSON keeps its `dimensions` field.
+`RuntimeParser.new(platform:, model: nil)` fixes the platform for `parse(name, text, complete: false, command: nil)` and `parse_many(names, text, complete: false, command: nil)`. Snapshots use `observations:` and expose `observations` / `observation(name)`; the old Ruby `dimensions` member and Wireless `dimension` accessor are removed. Known missing dimensions return `not_requested`; unknown names raise `ArgumentError`. Persisted schema 3 JSON uses `observations` and an independent `collection_status`; regenerate older reports.
 
 `Collector#collect_session(session:, target:, platform:, ...)` runs the same collection plan using an already connected session without connecting or closing it. AP LLDP still requires an explicitly injected factory.
 
 Dynamic inventory uses `Netdisco::Catalog`. Any duplicate row for a selected address, including another platform, prevents connection; excluded conflicts retain safe diagnostics. `NC_<PLATFORM>_ENABLE_PASSWORD` takes precedence over `NC_ENABLE_PASSWORD`.
+
+本次契约升级要求重新生成旧报告和计划；Ruby 快照使用 `observations`、`collection_status` 和 `Time`，JSON 通过 `CtxRunner::Document` 输出 UTC ISO8601（解析基础库仅提供 `Result`）。跨模块约定见 [ctx_runner 契约迁移](https://github.com/gatework/ctx_runner/blob/main/docs/contracts-2026-10-29.md)。

@@ -4,6 +4,14 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+## 0.8.0 (2026-10-29)
+
+- Load the dimension registry explicitly for standalone offline review; aggregate concurrent collection reports in a stable device order.
+
+- Compose the shared snapshot contract, remove the synthetic collection observation and reject unknown runtime dimensions.
+- Delegate interactive apply to ctx_cli and resolve credentials through net-connector. Require a named --item and adjacent SHA256 checksum.
+- Aggregate eligible template changes into schema 3 plan.json, retaining a configuration fingerprint per device. Regenerate all old reports and plans.
+
 ## 0.7.0 (2026-10-29)
 
 - Move RuntimeParser platform to construction; add command provenance to parse/parse_many. Rename Snapshot Ruby members to observations/observation while retaining dimensions in persisted reports. Add Collector#collect_session for borrowed sessions. Use Catalog and shared Credentials in CLI; reject selected duplicate addresses across platforms before connecting.

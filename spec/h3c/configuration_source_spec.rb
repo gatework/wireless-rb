@@ -54,7 +54,7 @@ RSpec.describe Wireless::H3c::Parsers::DisplayCurrentConfiguration do
     expect(parser.cursor.states).to eq(%i[parsed parsed ignored parsed parsed ignored ignored])
     expect(parser.cursor.position).to eq(7)
     expect(parser.cursor.unparsed_content).to eq("")
-    expect(result.to_h.keys).to eq(%i[status records issues])
+    expect(result.to_h.keys).to eq(%i[status records issues covered_scopes])
     expect([ result, parser, capture, parser.blocks ].map(&:inspect).join).not_to include("PRIVATE-PSK")
     expect(result.to_h.inspect).not_to include("PRIVATE-PSK")
     expect { capture.data[:configuration][:has_preshared_key] = false }.to raise_error(FrozenError)

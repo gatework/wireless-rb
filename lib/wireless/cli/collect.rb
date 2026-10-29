@@ -35,7 +35,7 @@ module Wireless
       def load_network
         require "net/connector"
       rescue LoadError
-        raise LoadError, "联网采集需要 net-connector >= 0.19.0；请在宿主 Gemfile 添加或 gem install net-connector", cause: nil
+        raise LoadError, "联网采集需要 net-connector >= 0.20.0；请在宿主 Gemfile 添加或 gem install net-connector", cause: nil
       end
 
       # YAML 静态设备或显式 Netdisco 来源二选一；选中地址的所有冲突记录在连接前拒绝。
@@ -92,7 +92,7 @@ module Wireless
       rescue ArgumentError
         raise CtxCli::Collection::Error, "报告目录无效；请使用真实私有目录、权限0700，并检查目录路径。", cause: nil
       end
-      def after_collect(report, options) = nil
+      def after_collect(report, options) = report.finish_collected_review
 
       # 缺失用户名时不尝试连接；密码允许省略以支持明确的 SSH key/agent。
       def credentials!(device, options)

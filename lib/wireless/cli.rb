@@ -36,7 +36,7 @@ module Wireless
     end
 
     # 全局帮助不读取配置、环境文件或设备清单。
-    USAGE = "用法：wireless collect [选项]  只读采集与报告\n      wireless parse [选项]    离线文件或 stdin 解析\n      wireless review --batch DIR  离线修复建议\n      wireless apply --plan FILE  交互确认后下发\n      wireless --version\n使用 wireless collect --help 、wireless parse --help 或 wireless review --help 查看参数；--help-all 查看完整约定，--examples 查看范例。".freeze
+    USAGE = "用法：wireless collect [选项]  只读采集与报告\n      wireless parse [选项]    离线文件或 stdin 解析\n      wireless review --batch DIR  离线修复建议\n      wireless apply --plan FILE --item ID  交互确认后下发\n      wireless --version\n使用 wireless collect --help 、wireless parse --help 或 wireless review --help 查看参数；--help-all 查看完整约定，--examples 查看范例。".freeze
     private_constant :USAGE
   end
 end

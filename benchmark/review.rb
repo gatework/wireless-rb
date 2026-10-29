@@ -10,8 +10,11 @@ class ReviewBenchmarkSink < Wireless::CLI::Report
   attr_reader :plans
 
   def publish(relative, body)
-    (@plans ||= {})[relative] = body if relative.end_with?(".plan.json")
+    @plans = body if relative == "plan.json"
   end
+
+  def checkpoint(relative, value) = nil
+  def finalize(relative, summary, checkpoint:) = summary
 end
 
 puts JSON.generate(ruby: RUBY_DESCRIPTION, source: Wireless::CLI::Review::Report.instance_method(:write_review).source_location)
@@ -23,17 +26,18 @@ Dir.mktmpdir do |root|
     end
     config = { "service_templates" => templates }
     document = { "device" => { "name" => "AC", "host" => "192.0.2.1", "platform" => "h3c_wireless" },
-      "snapshot" => { "dimensions" => { "configuration" => { "status" => "complete", "records" => [ config ] } } } }
-    expected_digest = Wireless::ChangePlan.fingerprint(config)
+      "snapshot" => { "observations" => { "configuration" => { "status" => "complete", "records" => [ config ] } } } }
+    expected_digest = CtxRunner::Fingerprint.call(config)
     samples = 3.times.map do
       report = ReviewBenchmarkSink.new(root, scripts: true)
       GC.start
       allocated = GC.stat(:total_allocated_objects)
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      report.write_review(document, basename: "AC", source: "synthetic", source_sha256: "a" * 64)
+      entry = report.write_review(document, basename: "AC", source: "synthetic", source_sha256: "a" * 64)
+      report.finish_review([ entry ], source_batch: "synthetic")
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
       objects = GC.stat(:total_allocated_objects) - allocated
-      plans = report.plans.values.map { |body| JSON.parse(body) }
+      plans = JSON.parse(report.plans).fetch("changes").values
       raise "Lost plans" unless plans.size == count && plans.map { |plan| plan["change"]["name"] } == templates.map { |template| template["name"] }
       raise "Wrong fingerprint" unless plans.all? { |plan| plan["expected_config_sha256"] == expected_digest }
       raise "Lost commands" unless plans.all? { |plan| plan["commands"].include?(" undo cipher-suite tkip") && plan["rollback"].include?(" cipher-suite tkip") }

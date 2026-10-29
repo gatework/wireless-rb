@@ -53,6 +53,17 @@ RSpec.describe "WIRELESS installed command" do
     expect(JSON.parse(stdout)).to include("status" => "complete", "records" => [])
   end
 
+  it "reviews saved evidence without first loading the library or connector" do
+    batch = File.join(@home, "saved")
+    FileUtils.mkdir_p(File.join(batch, "devices"))
+    document = { schema_version: 3, kind: "collection", device: { name: "WLC", host: "192.0.2.1", platform: "h3c_wireless" }, snapshot: nil }
+    File.write(File.join(batch, "devices", "wlc.json"), JSON.generate(document))
+    _stdout, stderr, status = command("review", "--batch", batch, "--output", File.join(@home, "reviews"))
+    expect(status).to be_success, stderr
+    summary = JSON.parse(File.read(Dir[File.join(@home, "reviews", "*", "review.json")].fetch(0)))
+    expect(summary).to include("schema_version" => 3, "kind" => "review", "devices" => 1, "status" => "complete")
+  end
+
   it "reports a missing collection dependency without a backtrace" do
     program = <<~RUBY
       require "wireless/cli"
@@ -73,7 +84,7 @@ RSpec.describe "WIRELESS installed command" do
 
   it "loads the library and CLI without the connector or executing a command" do
     program = 'require "wireless/cli"; abort if defined?(Net::Connector); abort if $LOADED_FEATURES.any? { |f| f.include?("wireless/cli/collect") }'
-    stdout, stderr, status = Open3.capture3(RbConfig.ruby, "-I#{root}/lib", "-e", program)
+    stdout, stderr, status = Bundler.with_unbundled_env { Open3.capture3(RbConfig.ruby, "-I#{root}/lib", "-e", program) }
     expect(status).to be_success, stderr
     expect(stdout).to eq("")
   end

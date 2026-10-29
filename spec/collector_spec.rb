@@ -3,7 +3,7 @@
 require_relative "spec_helper"
 
 RSpec.describe Wireless::Collector do
-  let(:target) { { key: "fixture:controller", host: +"192.0.2.10" } }
+  let(:target) { { id: "fixture:controller", host: +"192.0.2.10" } }
   let(:connector) { double("Connector", platform: :h3c_wireless) }
   let(:session) { double("CLI session", connected?: true) }
   let(:collector) { described_class.new }
@@ -63,7 +63,7 @@ RSpec.describe Wireless::Collector do
 
     expect(result.records(:access_points)).to contain_exactly(include(name: "AP-FIRST"))
     expect(result.observation(:access_points)).to be_complete
-    expect(result.observation(:collection).issues).to eq([ { code: :session_reentered } ])
+    expect(result.issues).to eq([ { code: :session_reentered, stage: :close } ])
     expect(result).not_to be_complete
     expect(session).to have_received(:send_commands).with([ "screen-length disable" ]).once
     expect(session).to have_received(:send_commands).with([ "display wlan ap all verbose" ]).once
@@ -83,7 +83,7 @@ RSpec.describe Wireless::Collector do
 
     expect(result.observation(:access_points).status).to eq(:failed)
     expect(result.observation(:access_points).issues).to include(include(code: :command_execution_failed))
-    expect(result.observation(:collection).issues).to eq([ { code: :session_reentered } ])
+    expect(result.issues).to eq([ { code: :session_reentered, stage: :close } ])
     expect(second_session).not_to have_received(:send_commands)
   end
 
@@ -93,7 +93,7 @@ RSpec.describe Wireless::Collector do
 
     expect(result.observation(:access_points).status).to eq(:failed)
     expect(result.observation(:clients)).to be_complete
-    expect(result.observation(:collection)).to be_partial
+    expect(result.collection_status).to eq(:partial)
     expect(result.observation(:access_points).issues.inspect).not_to include("private transport detail")
   end
 
@@ -112,7 +112,7 @@ RSpec.describe Wireless::Collector do
       expect(result.observation(:access_points).started_at).to eq(result.observation(:radios).started_at)
       expect(result.observation(:access_points).evidence).to eq(result.observation(:radios).evidence)
       expect(result.observation(:clients)).to be_complete
-      expect(result.observation(:collection)).to be_partial
+      expect(result.collection_status).to eq(:partial)
     end
   end
 
@@ -120,11 +120,12 @@ RSpec.describe Wireless::Collector do
     outputs["display current-configuration"] = "sysname WLC\nwlan service-template office\n ssid Office\n#\n--More--\nreturn\n"
     result = collect(:configuration, :ap_groups, :service_templates, :clients)
 
-    %i[configuration ap_groups service_templates collection].each do |dimension|
+    %i[configuration ap_groups service_templates].each do |dimension|
       expect(result.observation(dimension)).to be_partial
     end
     expect(result.observation(:service_templates).records.first[:ssid]).to eq("Office")
     expect(result.observation(:clients)).to be_complete
+    expect(result.collection_status).to eq(:partial)
     expect(session).to have_received(:send_commands).with([ "display current-configuration" ]).once
   end
 
@@ -141,7 +142,7 @@ RSpec.describe Wireless::Collector do
 
     expect(result.observation(:access_points)).to be_complete
     expect(result.observation(:lldp).issues).to eq([ { code: :ap_session_required } ])
-    expect(result.observation(:collection)).to be_partial
+    expect(result.collection_status).to eq(:partial)
   end
 
   it "does not resolve AP credentials when no AP transport was injected" do
@@ -176,7 +177,7 @@ RSpec.describe Wireless::Collector do
     result = described_class.new(ap_session_factory: factory).collect(connector: connector, target: target,
       platform: :h3c, dimensions: [ :lldp ])
 
-    expect(result.observation(:collection).issues).to eq([ { code: :session_reentered } ])
+    expect(result.issues).to eq([ { code: :session_reentered, stage: :close } ])
     expect(result.observation(:lldp).evidence).to contain_exactly(include(ap_name: "AP-LAB", attempted: false))
     expect(factory).to have_received(:call).with(controller: session).once
     expect(ap_reader).to have_received(:read).with(access_point: include(name: "AP-LAB")).once
@@ -321,7 +322,7 @@ RSpec.describe Wireless::Collector do
     expect(result.observation(:clients)).to be_complete
     expect(result.observation(:access_points)).to be_complete
     expect(result.observation(:lldp).issues).to include(include(code: :ap_session_setup_failed, stage: :ap_setup))
-    expect(result.observation(:collection).status).to eq(:partial)
+    expect(result.collection_status).to eq(:partial)
     expect(result.observation(:lldp).issues.inspect).not_to include("private adapter details")
   end
 
@@ -415,7 +416,7 @@ RSpec.describe Wireless::Collector do
     result = collect(:access_points)
 
     expect(result.observation(:access_points)).to be_complete
-    expect(result.observation(:collection).issues).to eq([ { code: :session_close_failed } ])
+    expect(result.issues).to eq([ { code: :session_close_failed, stage: :close, error_type: "IOError" } ])
   end
 
   it "rejects invalid targets, selections and mismatched platforms without connecting" do

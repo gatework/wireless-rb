@@ -26,17 +26,18 @@ RSpec.describe "Wireless interactive apply" do
     stream
   end
 
-  def exercise(confirmation: true, tty: true, drift: false, fail_write: false, altered: false, persistence_failure: false, failed_readback: false, checkpoint_failure: false, file_credentials: false, callback_count: 1, broken_error: false, interrupted_write: false)
+  def exercise(env: nil, confirmation: true, tty: true, drift: false, fail_write: false, altered: false, persistence_failure: false, failed_readback: false, checkpoint_failure: false, file_credentials: false, callback_count: 1, broken_error: false, interrupted_write: false)
     Dir.mktmpdir do |root|
       File.write(File.join(root, ".env"), "NC_DEVICE_USERNAME=file-user\nNC_DEVICE_PASSWORD=private-file-secret\n") if file_credentials
-      process_environment = file_credentials ? { "NC_DEVICE_USERNAME" => "process-user" } : { "NC_DEVICE_USERNAME" => "test" }
+      process_environment = env || (file_credentials ? { "NC_DEVICE_USERNAME" => "process-user" } : { "NC_DEVICE_USERNAME" => "test" })
       credentials = []
       commands, rollback = Wireless::ChangePlan.render(change)
-      plan = { schema_version: 1, platform: "h3c_wireless", device: { "host" => "192.0.2.1", "name" => "test" }, expected_config_sha256: CtxRunner::Fingerprint.call(config), change: change, commands: commands, rollback: rollback, prerequisites: [], impact: "test" }
+      plan = { schema_version: 3, kind: "change", platform: "h3c_wireless", device: { "host" => "192.0.2.1", "name" => "test" }, expected_config_sha256: CtxRunner::Fingerprint.call(config), change: change, commands: commands, rollback: rollback, prerequisites: [], impact: "test" }
       plan[:commands] = [ "reboot" ] if altered
       path = File.join(root, "plan.json")
-      File.write(path, JSON.generate(plan))
-      token = "APPLY 192.0.2.1 #{Digest::SHA256.file(path).hexdigest[0, 12]}"
+      File.write(path, JSON.generate(schema_version: 3, kind: "change_plan", platform: "h3c_wireless", changes: { "test-change" => plan }))
+      File.write("#{path}.sha256", Digest::SHA256.file(path).hexdigest)
+      token = "APPLY 192.0.2.1 #{Digest::SHA256.file(path).hexdigest[0, 12]} test-change"
       input = tty ? terminal(confirmation ? "#{token}\n" : "no\n") : StringIO.new("#{token}\n")
       out, error = terminal, terminal
       error.define_singleton_method(:puts) { |*| raise IOError, "private-diagnostic-failure" } if broken_error
@@ -69,10 +70,19 @@ RSpec.describe "Wireless interactive apply" do
           original.call(state)
         end
       end
-      status = Wireless::CLI.run([ "apply", "--plan", path, "--directory", File.join(root, "execution") ], env: process_environment, out: out, error: error, input: input, connector_factory: factory, discovery: { directories: [ root ], home: root, cwd: root })
+      status = Wireless::CLI.run([ "apply", "--plan", path, "--item", "test-change", "--directory", File.join(root, "execution") ], env: process_environment, out: out, error: error, input: input, connector_factory: factory, discovery: { directories: [ root ], home: root, cwd: root })
       journals = Dir[File.join(root, "execution", "*", "execution.json")].map { |file| JSON.parse(File.read(file)) }
       { status: status, reads: reads, writes: writes, connections: connections, journals: journals, error: error.string, credentials: credentials, environment: process_environment }
     end
+  end
+
+  it "uses common credentials for empty platform overrides and keeps the platform enable password" do
+    result = exercise(env: { "NC_DEVICE_USERNAME" => "shared-user", "NC_DEVICE_PASSWORD" => "shared-secret",
+      "NC_H3C_WIRELESS_USERNAME" => "", "NC_H3C_WIRELESS_PASSWORD" => "", "NC_ENABLE_PASSWORD" => "common-enable",
+      "NC_H3C_WIRELESS_ENABLE_PASSWORD" => "platform-enable" })
+    expect(result[:status]).to eq(0), result[:error]
+    expect(result[:credentials]).to contain_exactly(include(username: "shared-user", password: "shared-secret", enable_password: "platform-enable"))
+    expect(result[:journals].to_s + result[:error]).not_to include("shared-secret", "platform-enable")
   end
 
   it "returns a preflight failure without connecting when stderr is unavailable" do

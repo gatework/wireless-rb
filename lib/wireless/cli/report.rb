@@ -4,6 +4,7 @@ require "json"
 require "time"
 require "ctx_runner/report"
 require "ctx_runner/document"
+require "ctx_runner/evidence"
 require_relative "review/report"
 
 module Wireless
@@ -17,6 +18,7 @@ module Wireless
 
       def initialize(root, scripts: false)
         @scripts = scripts
+        @review_entries, @review_lock = [], Mutex.new
         @report = CtxRunner::Report.new(root, error_class: Error)
         prepare_directory(File.join(directory, "devices"))
       end
@@ -31,7 +33,7 @@ module Wireless
         name = "#{device.fetch('name').gsub(/[^A-Za-z0-9_.-]/, '_')[0, 100]}-#{device.fetch('host').tr(':', '_')}"
         # 保存状态属于批次宿主；不能让正在发布的文件预先声明自身已保存。
         body = result.reject { |key, _| key == :report_saved }.merge(snapshot: snapshot && snapshot.to_h)
-        document = CtxRunner::Document.call(body)
+        document = CtxRunner::Evidence.wrap(body, kind: "collection")
         advice = report_advice(Recommendations.new(document).call)
         document = document.merge("recommendations" => advice)
         json = JSON.pretty_generate(document) + "\n"
@@ -43,7 +45,13 @@ module Wireless
         lines << "错误：#{result[:error]}" if result[:error]
         lines << "修复建议：recommendations/#{name}.txt；#{advice[:counts]}；候选配置未执行。"
         publish("devices/#{name}.txt", lines.join("\n") + "\n")
-        write_review(document, basename: name, source: File.join(directory, "devices", "#{name}.json"), source_sha256: Digest::SHA256.hexdigest(json), advice: advice)
+        entry = write_review(document, basename: name, source: File.join(directory, "devices", "#{name}.json"), source_sha256: Digest::SHA256.hexdigest(json), advice: advice)
+        @review_lock.synchronize { @review_entries << entry }
+      end
+
+      def finish_collected_review
+        entries = @review_lock.synchronize { @review_entries.sort_by { |entry| entry[:device].fetch("host") } }
+        finish_review(entries, source_batch: directory)
       end
 
       # 摘要不嵌入配置事实，只汇总状态与诊断，供终端和自动化共用。

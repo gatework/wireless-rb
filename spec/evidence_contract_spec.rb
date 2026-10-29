@@ -54,7 +54,7 @@ RSpec.describe "Wireless evidence contracts" do
       allow(connector).to receive(:open).and_yield(session)
       result = nil
       expect do
-        result = Wireless::Collector.new.collect(connector: connector, target: {}, platform: requested, dimensions: [ :access_points ])
+        result = Wireless::Collector.new.collect(connector: connector, target: { host: "192.0.2.1" }, platform: requested, dimensions: [ :access_points ])
       end.not_to raise_error
       expect(result).to be_complete
     end

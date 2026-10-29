@@ -64,7 +64,7 @@ RSpec.describe "Wireless platform contracts" do
     result = Wireless::Collector.new.collect(connector: connector, target: { host: "192.0.2.1" }, platform: :huawei)
 
     expect(result).to be_complete
-    expect(result.observations.keys).to contain_exactly(:access_points, :clients, :collection)
+    expect(result.observations.keys).to contain_exactly(:access_points, :clients)
     expect(commands).to eq([ "screen-length 0 temporary", "display ap all", "display station all" ])
   end
 end

@@ -38,21 +38,20 @@ RSpec.describe "Immutable facts and evidence" do
     it "detaches #{domain} evidence and timestamps from caller state" do
       evidence = [ { command: +"show test", sha256: +"digest" } ]
       time = Time.now
-      expected_time = time.dup
-      value = domain::Observation.new(name: :configuration, status: :complete,
+            value = domain::Observation.new(name: :configuration, status: :complete,
         evidence: evidence, started_at: time, completed_at: time)
       evidence.first[:command].clear
       time.localtime("+09:00")
 
       expect(value.evidence.first[:command]).to eq("show test")
-      expect(value.completed_at.utc_offset).to eq(expected_time.utc_offset)
+      expect(value.completed_at.utc_offset).to eq(0)
       expect { value.evidence.clear }.to raise_error(FrozenError)
       expect { value.completed_at.localtime("+07:00") }.to raise_error(FrozenError)
     end
 
     it "protects #{domain} snapshot identity and dimension coverage from caller mutation" do
       dimensions = { configuration: domain::Observation.new(name: :configuration, status: :complete) }
-      target = { host: +"192.0.2.1", attributes: { serial: +"leaf-1" } }
+      target = { host: +"192.0.2.1", id: +"leaf-1" }
       attributes = {}
       value = domain::Snapshot.new(target: target, observations: dimensions, observed_at: Time.now, **attributes)
       dimensions.clear
@@ -63,7 +62,7 @@ RSpec.describe "Immutable facts and evidence" do
       expect(value.target[:host]).to eq("192.0.2.1")
       expect(value.fabric_key).to eq("LAB") if attributes.key?(:fabric_key)
       expect { value.observations.clear }.to raise_error(FrozenError)
-      expect { value.target[:attributes][:serial].clear }.to raise_error(FrozenError)
+      expect { value.target[:id].clear }.to raise_error(FrozenError)
       expect(value.observed_at).to be_frozen
     end
   end
@@ -93,7 +92,7 @@ RSpec.describe "Immutable facts and evidence" do
     [ Hash.new({ secret: +"PRIVATE_DEFAULT" }), Hash.new { raise "caller callback" } ].each do |dimensions|
       observation = Wireless::Observation.new(name: :clients, status: :complete)
       dimensions[:clients] = observation
-      snapshot = Wireless::Snapshot.new(target: {}, observations: dimensions)
+      snapshot = Wireless::Snapshot.new(target: { host: "192.0.2.1" }, observations: dimensions)
       expect(snapshot.observations[:missing]).to be_nil
       expect(snapshot.observations[:clients]).to equal(observation)
     end
@@ -102,7 +101,7 @@ RSpec.describe "Immutable facts and evidence" do
   it "keeps fact, target and projection contents out of display strings" do
     observation = Wireless::Observation.new(name: :clients, status: :complete,
       records: [ { username: "PRIVATE_FACT" } ], evidence: [ { detail: "PRIVATE_EVIDENCE" } ])
-    snapshot = Wireless::Snapshot.new(target: { secret: "PRIVATE_TARGET" }, observations: { clients: observation })
+    snapshot = Wireless::Snapshot.new(target: { host: "192.0.2.1", name: "PRIVATE_TARGET" }, observations: { clients: observation })
     projection = Wireless::Projection.new(dimensions: { clients: { status: :complete, detail: "PRIVATE_PROJECTION" } })
     [ observation, snapshot, projection ].each do |value|
       expect(value.inspect).not_to include("PRIVATE_")

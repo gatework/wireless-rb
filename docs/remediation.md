@@ -12,7 +12,7 @@ bundle exec ruby bin/wireless review --batch /absolute/path/to/batch --output /p
 
 - `review.txt` / `review.json`：离线批次索引、建议分类和源文件 SHA256。
 - `recommendations/*.txt`：普通文本报告，包含事实依据、适用条件、影响、待补信息、候选配置、条件回退和验收步骤。
-- `*.json`：同一建议的机器可读结构，`schema_version: 1`、`review_only: true`。
+- `*.json`：同一建议的机器可读结构，`schema_version: 3`、`kind: recommendations`、`review_only: true`。
 - `*.verify.cli`：去重后的只读核查命令。
 - `*.suggested.cfg` / `*.rollback.cfg`：全部注释化的配置草稿，不能整文件直接下发；TXT/JSON 内保留逐项 CLI。
 
@@ -31,15 +31,15 @@ bundle exec ruby bin/wireless review --batch /absolute/path/to/batch --output /p
 ## 交互式下发
 
 ```sh
-bundle exec ruby bin/wireless apply --plan /path/to/device.1.plan.json --env-file /path/to/.env
+bundle exec ruby bin/wireless apply --plan /path/to/plan.json --item CHANGE_ID --env-file /path/to/.env
 ```
 
-必须使用真实终端；不存在 `--yes`，管道输入不能确认。完整展示设备、前提、影响、配置与回退后，需准确输入 `APPLY <IP> <计划SHA256前12位>` 才连接设备。SSH 严格校验已知主机密钥，凭据沿用 NC_DEVICE_* / 平台 NC_*；环境文件必须显式指定。
+必须使用真实终端；不存在 `--yes`，管道输入不能确认。完整展示设备、前提、影响、配置与回退后，需准确输入 `APPLY <IP> <计划SHA256前12位> <CHANGE_ID>` 才连接设备。SSH 严格校验已知主机密钥，凭据沿用 NC_DEVICE_* / 平台 NC_*；环境文件沿用共享配置发现，也可用 --env-file 指定；空平台字段回退到通用凭据，平台 enable password 优先。
 
 确认后先重读完整配置并核对已解析配置事实的指纹和动作前提；已解析事实变化、部分证据或未经支持的动作均拒绝写入。指纹不覆盖解析器尚未建模的配置行，不能替代全量配置审查。文件中的命令会由类型化动作重新渲染核对，不能编辑为任意脚本。每条命令前持久化意图，执行后保存回执状态。失败或中断立即停止并标记 uncertain，不自动重试、重连或回退；先人工回读确定实际效果。
 
 成功只表示目标配置回读符合计划，仍需业务流量验收。执行日志位于 `wireless-executions/<UTC>/execution.json`，包含计划摘要和步骤状态、不含密码或原始回显。回退草稿只供审阅，不提供自动执行入口；计划也不执行保存配置。
 
-每个计划仅包含单设备单项增量。应用一项后同设备其他旧计划会因配置指纹变化而过期，应重新采集/审查生成新计划，不能连续盲目运行旧计划。本入口只重新验证目标控制器的配置；终端兼容性、版本支持及业务意图仍由确认人核对。
+plan.json 使用 schema_version: 3、kind: change_plan 和具名 changes，旁边的 plan.json.sha256 校验整个文件；每项变更仅包含单设备单项增量。旧报告及计划必须重新生成。应用一项后同设备其他旧计划会因配置指纹变化而过期，应重新采集/审查生成新计划，不能连续盲目运行旧计划。本入口只重新验证目标控制器的配置；终端兼容性、版本支持及业务意图仍由确认人核对。
 
 当前可交互执行计划仅支持 H3C 已有 CCMP/RSN 替代协议、明确启停状态的 TKIP/WPA 移除；不能执行 AP 重启/开启射频、地址冲突清表或未知模板创建。

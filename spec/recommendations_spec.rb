@@ -6,7 +6,7 @@ require "json"
 RSpec.describe "Wireless remediation recommendations" do
   def review(template, complete: true, extra: {})
     observation = Wireless::Config.new(platform: :h3c_wireless).parse(template, complete: complete)
-    document = JSON.parse(JSON.generate(device: { platform: "h3c_wireless", host: "192.0.2.1", name: "AC" }, snapshot: { dimensions: { configuration: observation.to_h }.merge(extra) }))
+    document = JSON.parse(JSON.generate(device: { platform: "h3c_wireless", host: "192.0.2.1", name: "AC" }, snapshot: { observations: { configuration: observation.to_h }.merge(extra) }))
     Wireless::Recommendations.new(document).call
   end
 
@@ -52,7 +52,7 @@ RSpec.describe "Wireless remediation recommendations" do
   end
 
   it "blocks injected template names instead of placing them in a command" do
-    document = { "device" => { "platform" => "h3c_wireless" }, "snapshot" => { "dimensions" => { "configuration" => { "status" => "complete", "records" => [ { "service_templates" => [ { "name" => "lab\nreboot", "enabled" => true, "configuration" => { "cipher_suites" => %w[ccmp tkip], "security_ies" => %w[rsn wpa] } } ] } ] } } } }
+    document = { "device" => { "platform" => "h3c_wireless" }, "snapshot" => { "observations" => { "configuration" => { "status" => "complete", "records" => [ { "service_templates" => [ { "name" => "lab\nreboot", "enabled" => true, "configuration" => { "cipher_suites" => %w[ccmp tkip], "security_ies" => %w[rsn wpa] } } ] } ] } } } }
     item = Wireless::Recommendations.new(document).call[:items].first
     expect(item).to include(status: "blocked", commands: [])
   end

@@ -184,7 +184,7 @@ ruby bin/wireless parse --dimension lldp --ap-name AP-01 --file lldp.txt --compl
 
 ## 修复建议
 
-`wireless collect` 默认输出逐设备诊断，使用 `--scripts` 可选导出配置建议；`wireless review --batch DIR` 可离线补生成既有报告的候选配置、条件回退和只读验收命令。导出不会执行变更；独立 `apply --plan FILE` 必须在真实终端明确确认，配置漂移或失败即停止。详见[修复建议说明](../docs/remediation.md)。
+`wireless collect` 默认输出逐设备诊断，使用 `--scripts` 可选导出配置建议；`wireless review --batch DIR` 可离线补生成既有报告的候选配置、条件回退和只读验收命令。导出不会执行变更；独立 `apply --plan FILE --item ID` 必须在真实终端明确确认，配置漂移或失败即停止。详见[修复建议说明](../docs/remediation.md)。
 
 ## 统一设备筛选
 

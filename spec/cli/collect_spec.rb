@@ -386,7 +386,7 @@ RSpec.describe Wireless::CLI::Collect do
     expect(sessions.fetch("192.0.2.10").commands).to eq([ "screen-length disable", "display wlan ap all verbose" ])
     expect(sessions.fetch("192.0.2.11").commands).to eq([ "screen-length 0 temporary", "display ap all" ])
     report = JSON.parse(File.read(Dir["#{summary.fetch('directory')}/devices/*.json"].first))
-    expect(report.dig("snapshot", "dimensions", "access_points", "status")).to eq("complete")
+    expect(report.dig("snapshot", "observations", "access_points", "status")).to eq("complete")
     expect(File.stat("#{summary.fetch('directory')}/summary.json").mode & 0o777).to eq(0o600)
   end
 
@@ -394,7 +394,7 @@ RSpec.describe Wireless::CLI::Collect do
     config(dimensions: nil, devices: [ { "host" => "192.0.2.10", "platform" => "huawei" } ])
     session = WirelessFixtureSession.new(:huawei)
     expect(run_cli("--json", factory: factory_for({ "192.0.2.10" => session }))).to eq(0)
-    expect(JSON.parse(@out.string).dig("devices", 0, "dimensions").keys).to contain_exactly("access_points", "clients", "collection")
+    expect(JSON.parse(@out.string).dig("devices", 0, "dimensions").keys).to contain_exactly("access_points", "clients")
   end
 
   it "does not mark a connector that never yields a session as complete" do

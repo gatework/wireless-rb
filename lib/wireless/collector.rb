@@ -41,7 +41,7 @@ module Wireless
     def collect_request(target:, platform:, model:, dimensions:, ap_credentials:, ap_names:, connector: nil, session: nil)
       platform = platform.to_s.dup.freeze
       model = model.dup.freeze if model.is_a?(String)
-      raise ArgumentError, "Target must be a hash" unless target.is_a?(Hash)
+      target = CtxRunner::Target.snapshot(target)
 
       profile = ParserRegistry.fetch(platform, model: model)
       dimensions = profile.commands.keys - [ :lldp ] if dimensions.nil?
@@ -52,7 +52,6 @@ module Wireless
         raise ArgumentError, "Invalid wireless dimensions or AP selection"
       end
       # 外部连接和适配器回调前保存身份与选择范围。
-      target = CtxParser::Immutable.copy(target)
       ap_names = ap_names.map { |name| name.dup.freeze }.freeze
       requested = dimensions.dup
       # LLDP 需要 AP 清单提供身份；组和服务模板需要配置证据补充关联关系。
@@ -93,13 +92,11 @@ module Wireless
       if collection.failure
         code = collection.failure.fetch(:code)
         requested.each { |name| observations[name] ||= unavailable_observation(name, :failed, code, skipped: true, stage: collection.stage) }
-        observations[:collection] = unavailable_observation(:collection, :failed, code)
       end
       # 连接器未交付会话也不能把空观测视为完整采集。
       requested.each { |name| observations[name] ||= unavailable_observation(name, :failed, :session_not_opened, skipped: true) }
-      status = observations.values.all?(&:complete?) ? :complete : observations.values.any?(&:available?) ? :partial : :failed
-      observations[:collection] ||= Observation.new(name: :collection, status: status, completed_at: @clock.call)
-      Snapshot.new(target: target, observations: observations, observed_at: @clock.call)
+      Snapshot.new(target: target, observations: observations, observed_at: @clock.call,
+        issues: collection.failure ? [ collection.failure ] : [])
     end
 
     # 连接器与请求通过同一 Registry 解析别名；未知平台沿用明确的不匹配错误。

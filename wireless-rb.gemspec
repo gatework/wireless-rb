@@ -22,13 +22,14 @@ Gem::Specification.new do |spec|
   # 显式限定打包文件，排除设备回显、凭据、测试夹具和构建产物。
   spec.files = Dir.chdir(__dir__) { Dir["lib/**/*.rb", "examples/**/*.rb", "lib/wireless/cli/templates/*", "bin/wireless", "bin/wireless.rb", "bin/README.md", "docs/**/*.md", "README*.md", "CHANGELOG.md", "LICENSE"].sort }
   spec.require_paths = [ "lib" ]
+  spec.add_dependency "forwardable"
   spec.bindir = "bin"
   spec.executables = [ "wireless" ]
 
-  spec.add_dependency "ctx_cli"
-  spec.add_dependency "ctx_runner", ">= 0.3.0", "< 0.4"
-  spec.add_dependency "ctx_parser", ">= 0.3.0", "< 0.4"
-  spec.add_dependency "ctx_driver", ">= 0.3.0", "< 0.4"
+  spec.add_dependency "ctx_cli", ">= 0.4.0", "< 0.5"
+  spec.add_dependency "ctx_runner", ">= 0.4.0", "< 0.5"
+  spec.add_dependency "ctx_parser", ">= 0.4.0", "< 0.5"
+  spec.add_dependency "ctx_driver", ">= 0.4.0", "< 0.5"
   spec.add_dependency "date"
   %w[time json optparse yaml fileutils tempfile ipaddr].each { |name| spec.add_dependency name }
 end

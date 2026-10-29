@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "ctx_runner/evidence"
 require "digest"
 require "ctx_runner/fingerprint"
 require_relative "../../recommendations"
@@ -32,35 +33,42 @@ module Wireless
             suffix = kind == :commands ? "suggested.cfg" : "rollback.cfg"
             publish("#{prefix}.#{suffix}", lines.map { |line| "! #{line}" }.join("\n") + "\n")
           end
+          changes = {}
           if @scripts
             # 外部建议不能替代来源完整性；只有唯一完整配置才能绑定可执行计划。
-            observation = document.dig("snapshot", "dimensions", "configuration")
+            observation = document.dig("snapshot", "observations", "configuration")
             records = observation && observation["records"]
             config = records.first if observation && observation["status"] == "complete" && records.is_a?(Array) && records.one? && records.first.is_a?(Hash)
             config_sha256 = nil
-            advice[:items].each_with_index do |item, index|
+            advice[:items].each do |item|
               next unless config && item[:status] == "candidate" && item[:change] && ChangePlan.eligible?(config, item[:change])
               commands, rollback = ChangePlan.render(item[:change])
               config_sha256 ||= CtxRunner::Fingerprint.call(config)
-              plan = { schema_version: 1, platform: "h3c_wireless", device: document.fetch("device"), expected_config_sha256: config_sha256,
+              plan = { schema_version: CtxRunner::Evidence::VERSION, kind: "change", platform: "h3c_wireless", device: document.fetch("device"), expected_config_sha256: config_sha256,
                 source: source, source_sha256: source_sha256, change: item[:change], commands: commands, rollback: rollback,
                 scope: item[:scope], title: item[:title], prerequisites: item[:prerequisites], impact: item[:impact], verify: item[:verify] }
-              publish("#{prefix}.#{index + 1}.plan.json", JSON.pretty_generate(plan) + "\n")
+              id = [ basename, item[:change].fetch("kind"), CtxRunner::Fingerprint.call(item[:change])[0, 12] ].join("--")
+              changes[id] = plan
             end
           end
-          { device: advice[:device], counts: advice[:counts], report: "#{prefix}.txt", source: source, source_sha256: source_sha256 }
+          { device: advice[:device], counts: advice[:counts], report: "#{prefix}.txt", source: source, source_sha256: source_sha256, changes: changes, plans: changes.keys }
         end
 
         # 离线摘要先写未完成检查点，完成所有正文后才确认生成成功。
         def finish_review(entries, source_batch:)
           counts = entries.each_with_object(Hash.new(0)) { |entry, total| entry[:counts].each { |key, count| total[key] += count } }
-          summary = { status: "incomplete", review_only: true, devices: entries.size, counts: counts, source_batch: source_batch, reports: entries }
+          summary = { schema_version: CtxRunner::Evidence::VERSION, kind: "review", status: "incomplete", review_only: true, devices: entries.size, counts: counts, source_batch: source_batch, reports: entries.map { |entry| entry.reject { |key, _| key == :changes } }, plan: "plan.json" }
           checkpoint("review.json", summary)
           lines = [ "WIRELESS 修复建议", "", "仅生成建议，未执行设备变更。candidate 需要确认条件；blocked 需要补齐参数；investigate 为排查或补采任务。", "", "设备：#{entries.size}；建议分类：#{counts}", "", "未命中规则不代表网络健康；本次不推断跨设备 Fabric 归属或完整业务基线。", "" ]
           entries.each do |entry|
             device = entry[:device] || {}
             lines << "#{device['name']}（#{device['host']}）：#{entry[:counts]}；报告：#{entry[:report]}"
           end
+          plan = CtxRunner::Evidence.wrap({ platform: "h3c_wireless", changes: entries.each_with_object({}) { |entry, all| all.merge!(entry.fetch(:changes)) } }, kind: "change_plan")
+          body = JSON.pretty_generate(plan) + "\n"
+          summary[:plan_sha256] = Digest::SHA256.hexdigest(body)
+          publish("plan.json", body)
+          publish("plan.json.sha256", summary[:plan_sha256] + "\n")
           publish("review.txt", lines.join("\n") + "\n")
           finalize("review.json", summary.merge(status: "complete"), checkpoint: summary)
         end

@@ -36,7 +36,7 @@ RSpec.describe Wireless::CLI::Connector do
           print prompt
         end
       PROGRAM
-      [ RbConfig.ruby, "-e", program ]
+      [ RbConfig.ruby, "--disable-gems", "-e", program ]
     end
   end
 
@@ -45,7 +45,7 @@ RSpec.describe Wireless::CLI::Connector do
     transport = WirelessPtyTransport.new(Net::Connector::Configuration.new(host: "192.0.2.10", **settings))
     connector = described_class.new({ "host" => "192.0.2.10", "platform" => "h3c" }, settings.merge(transport: transport))
     snapshot = Wireless::Collector.new(ap_session_factory: ->(**args) { Wireless::ApSession.new(**args) }).collect(
-      connector: connector, target: {}, platform: :h3c, dimensions: [ :lldp ], ap_credentials: { password: "fixture-ap" })
+      connector: connector, target: { host: "192.0.2.1" }, platform: :h3c, dimensions: [ :lldp ], ap_credentials: { password: "fixture-ap" })
     expect(snapshot).to be_complete
     expect(snapshot.observation(:lldp).evidence.first).to include(ap_name: "AP-LAB", attempted: true, status: :complete)
     expect(transport).to be_closed
@@ -55,7 +55,7 @@ RSpec.describe Wireless::CLI::Connector do
     settings = { username: "fixture-user", command_timeout: 2, login_timeout: 2, host_key_policy: "strict" }
     transport = WirelessPtyTransport.new(Net::Connector::Configuration.new(host: "192.0.2.11", **settings))
     connector = described_class.new({ "host" => "192.0.2.11", "platform" => "huawei" }, settings.merge(transport: transport))
-    snapshot = Wireless::Collector.new.collect(connector: connector, target: {}, platform: :huawei, dimensions: [ :access_points ])
+    snapshot = Wireless::Collector.new.collect(connector: connector, target: { host: "192.0.2.1" }, platform: :huawei, dimensions: [ :access_points ])
     expect(snapshot).to be_complete
     expect(snapshot.records(:access_points)).to be_empty
     expect(transport).to be_closed

@@ -19,7 +19,7 @@ RSpec.describe Wireless::H3c::Parsers::DisplayCurrentConfiguration do
       .to eq([ [ "EAP", "dot1x", true ], [ "GUEST", "psk", false ], [ "UNKNOWN", nil, nil ] ])
     expect(config[:service_templates][1].dig(:configuration, :has_preshared_key)).to be(true)
     expect(result.to_h.inspect).not_to include("SYNTHETIC-PRIVATE-PSK")
-    expect(result.to_h.keys).to eq(%i[status records issues])
+    expect(result.to_h.keys).to eq(%i[status records issues covered_scopes])
   end
 
   it "retains partial configuration while rejecting unknown and invalid CLI output" do

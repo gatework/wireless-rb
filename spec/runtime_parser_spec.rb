@@ -5,6 +5,12 @@ require "json"
 
 RSpec.describe Wireless::RuntimeParser do
   let(:parser) { described_class.new(platform: :h3c) }
+  it "rejects unknown dimension names while retaining known unsupported platform dimensions" do
+    expect { parser.parse(:invented, "", complete: true) }.to raise_error(ArgumentError)
+    expect { parser.parse_many([ :clients, :invented ], "", complete: true) }.to raise_error(ArgumentError)
+    expect(described_class.new(platform: :huawei).parse(:radios, "", complete: true).status).to eq(:unsupported)
+  end
+
   let(:ap_text) do
     <<~CLI
       Total number of APs : 1

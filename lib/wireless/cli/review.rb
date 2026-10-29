@@ -4,6 +4,7 @@ require "ctx_cli/command"
 require "ctx_cli/review"
 require "digest"
 require "ctx_runner/evidence"
+require_relative "../parser_registry"
 require_relative "report"
 
 module Wireless
@@ -52,7 +53,7 @@ module Wireless
 
       # 先校验公共证据外壳，再验证领域记录。
       def validate(document)
-        CtxRunner::Evidence.validate(document) { |record, dimension| validate_record(record, dimension) }
+        CtxRunner::Evidence.validate(document, names: SUPPORTED_DIMENSIONS) { |record, dimension| validate_record(record, dimension) }
       end
 
       # 在输出目录创建前验证所有会参与建议生成的嵌套字段。

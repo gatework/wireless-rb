@@ -21,8 +21,8 @@ module Wireless
 
     # 共享命令仅解析一次，再投影各请求维度。
     def parse_many(names, content, complete: false, command: nil)
-      unless names.is_a?(Array) && names.any? && names.all? { |name| name.is_a?(Symbol) } && names.uniq == names
-        raise ArgumentError, "Dimensions must be unique symbols"
+      unless names.is_a?(Array) && names.any? && names.all? { |name| SUPPORTED_DIMENSIONS.include?(name) } && names.uniq == names
+        raise ArgumentError, "Dimensions must be unique supported symbols"
       end
       raise ArgumentError, "Completeness must be boolean" unless [ true, false ].include?(complete)
       raise ArgumentError, "Parser input must be text" unless content.is_a?(String)
