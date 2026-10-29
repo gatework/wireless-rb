@@ -3,7 +3,7 @@
 require_relative "spec_helper"
 
 RSpec.describe "H3C AP radio detail scopes" do
-  let(:parser) { Wireless::RuntimeParser.new }
+  let(:parser) { Wireless::RuntimeParser.new(platform: :h3c) }
 
   # 字段层次依据 H3C AP management 命令参考，值为合成数据。
   let(:output) do

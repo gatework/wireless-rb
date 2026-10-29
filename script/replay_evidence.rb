@@ -29,7 +29,7 @@ results = names.flat_map do |name|
     observation = if name == :lldp
       Wireless::NeighborParser.new.parse(body, ap_name: "AP-EVIDENCE", complete: true)
     else
-      Wireless::RuntimeParser.new.parse(name, body, platform: :h3c, complete: true)
+      Wireless::RuntimeParser.new(platform: :h3c).parse(name, body, complete: true)
     end
     { raw_sha256: Digest::SHA256.hexdigest(raw), input_sha256: Digest::SHA256.hexdigest(body),
       command: command, dimension: name, framing: "exact_command_and_prompt_removed", bytes: body.bytesize,

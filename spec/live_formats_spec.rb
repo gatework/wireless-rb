@@ -3,7 +3,7 @@
 require_relative "spec_helper"
 
 RSpec.describe "H3C live output formats" do
-  let(:parser) { Wireless::RuntimeParser.new }
+  let(:parser) { Wireless::RuntimeParser.new(platform: :h3c) }
 
   it "separates AP totals from connection and license counters" do
     text = <<~CLI

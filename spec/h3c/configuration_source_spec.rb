@@ -239,7 +239,7 @@ RSpec.describe Wireless::H3c::Parsers::DisplayCurrentConfiguration do
       result = parser.parse(source, complete: true)
       expect(result).to be_complete
       expect(result.records.first[:service_templates].first[:ssid]).to eq(ssid)
-      expect(Wireless::RuntimeParser.new.parse(:configuration, source, complete: true)).to be_complete
+      expect(Wireless::RuntimeParser.new(platform: :h3c).parse(:configuration, source, complete: true)).to be_complete
     end
     expect(parser.parse("% Unrecognized command found at '^' position.\r", complete: true).status).to eq(:unsupported)
     expect(parser.parse("Error: Unknown command\n", complete: true).status).to eq(:unsupported)

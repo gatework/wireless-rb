@@ -40,8 +40,7 @@ module Wireless
           Wireless::NeighborParser.new(platform: options[:platform], model: options[:model]).parse(body,
             ap_name: options[:ap_name], complete: options[:complete])
         else
-          Wireless::RuntimeParser.new(model: options[:model]).parse(options[:dimension], body,
-            platform: options[:platform], complete: options[:complete])
+          Wireless::RuntimeParser.new(platform: options[:platform], model: options[:model]).parse(options[:dimension], body, complete: options[:complete])
         end
         if options[:json]
           @output.json(observation.to_h)

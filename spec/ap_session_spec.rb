@@ -25,8 +25,16 @@ RSpec.describe Wireless::ApSession do
     end
     allow(controller).to receive(:send_commands) do |texts|
       commands << only_record(texts)
-      receipt(Net::Connector::Command.new(only_record(texts)), "No LLDP neighbors\n", @prompt)
+      query_receipt(Net::Connector::Command.new(only_record(texts)), "No LLDP neighbors\n", @prompt)
     end
+  end
+
+  # 借用会话返回 Driver 协议；原生交互仍使用连接器回执。
+  def query_receipt(command, body, prompt)
+    Struct.new(:output, :steps, :body) do
+      def success? = true
+      def value! = body
+    end.new("#{command.text}\r\n#{body}#{prompt}", [ { command: command.text } ], body)
   end
 
   def receipt(command, body, prompt, error: nil)
@@ -211,7 +219,7 @@ RSpec.describe Wireless::ApSession do
     allow(controller).to receive(:send_commands) do |texts|
       command = only_record(texts)
       @prompt = "<WLC>"
-      receipt(Net::Connector::Command.new(command), "", @prompt)
+      query_receipt(Net::Connector::Command.new(command), "", @prompt)
     end
     outcome = reader.read(access_point: ap)
     expect(outcome[:error]).to eq(:ap_session_lost)
@@ -223,7 +231,7 @@ RSpec.describe Wireless::ApSession do
   it "does not send quit from an unexpected nested prompt" do
     allow(controller).to receive(:send_commands) do |texts|
       @prompt = "<UNEXPECTED>"
-      receipt(Net::Connector::Command.new(only_record(texts)), "", @prompt)
+      query_receipt(Net::Connector::Command.new(only_record(texts)), "", @prompt)
     end
     outcome = reader.read(access_point: ap)
     expect(outcome).to include(error: :ap_session_lost, cleanup_error: :ap_exit_failed)

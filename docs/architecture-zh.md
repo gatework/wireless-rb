@@ -71,7 +71,7 @@ result.projection.dimensions # 各库存维度的 applied/deferred 和安全诊�
 
 # 离线解析不建立会话、不写数据库。
 ::Wireless::Config.new.parse(configuration_text, complete: true)
-::Wireless::RuntimeParser.new.parse(:clients, client_output, platform: "h3c", complete: true)
+::Wireless::RuntimeParser.new(platform: :h3c).parse(:clients, client_output, complete: true)
 ```
 
 固定 AP 密码保存在现有 `Motor::EncryptedConfig` 的内部键 `network.wireless_ap`，值为 `password` 和可选 `username`。现有 Active Record Encryption 加密该值，配置中心通用接口不公开此内部键；不新增字段或第二套密钥存储。凭据仅在显式 LLDP 请求时读取，调用参数优先，不进入观察记录、默认检查输出和日志。

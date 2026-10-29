@@ -4,7 +4,7 @@ require_relative "spec_helper"
 require "json"
 
 RSpec.describe Wireless::RuntimeParser do
-  let(:parser) { described_class.new }
+  let(:parser) { described_class.new(platform: :h3c) }
   let(:ap_text) do
     <<~CLI
       Total number of APs : 1
@@ -41,7 +41,7 @@ RSpec.describe Wireless::RuntimeParser do
     parsed = Wireless::H3c::Parsers::DisplayWlanApAllVerbose.parse(ap_text.sub("AP-LAB", "AP--More--LAB"), complete: true)
     expect(parsed.status).to eq(:partial)
     expect(parsed.records).to be_empty
-    parsed = parser.parse(:access_points, "Total : 0\n-- More --\n", platform: :huawei, complete: true)
+    parsed = Wireless::RuntimeParser.new(platform: :huawei).parse(:access_points, "Total : 0\n-- More --\n", complete: true)
     expect(parsed.status).to eq(:partial)
     expect(parsed.issues).to eq([ { code: :invalid_terminal_output, line: 2 } ])
   end
@@ -143,16 +143,16 @@ RSpec.describe Wireless::RuntimeParser do
     expect(parsed).to be_complete
     expect(only_record(parsed.records)).to eq(mac_address: "02:00:00:00:00:01", reason: "Repeated failure")
     expect(parser.parse(:blocked_clients, "No blocked clients\n", complete: true)).to be_complete
-    expect(parser.parse(:radios, "", platform: "huawei", complete: true).status).to eq(:unsupported)
+    expect(Wireless::RuntimeParser.new(platform: "huawei").parse(:radios, "", complete: true).status).to eq(:unsupported)
   end
 
   it "parses Huawei AP rows and refuses a header without complete empty evidence" do
     header = "ID MAC Name Group IP Type State STA Uptime\n"
     text = "#{header}0 0200-0000-0007 AP-HW LAB 192.0.2.7 AP6050 nor 0 001:02:03:04\nTotal: 1\n"
-    parsed = parser.parse(:access_points, text, platform: "huawei", complete: true)
+    parsed = Wireless::RuntimeParser.new(platform: "huawei").parse(:access_points, text, complete: true)
     expect(parsed).to be_complete
     expect(only_record(parsed.records)).to include(operational_status: "online", client_count: 0, uptime_seconds: 93_784)
-    expect(parser.parse(:access_points, header, platform: "huawei", complete: true).status).to eq(:failed)
+    expect(Wireless::RuntimeParser.new(platform: "huawei").parse(:access_points, header, complete: true).status).to eq(:failed)
   end
   it "rejects malformed dimension requests before interpreting device output" do
     [ nil, :clients, "clients", [], [ "clients" ], [ :clients, :clients ] ].each do |names|

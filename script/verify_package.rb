@@ -80,10 +80,10 @@ Dir.mktmpdir("gem-install-") do |home|
     abort "Unexpected transport dependency" if defined?(Net::Connector) || Gem::Specification.find_all_by_name("net-connector").any?
     configuration = Wireless::Config.new.parse("sysname WLC\\nreturn\\n", complete: true)
     abort "Offline configuration parsing failed" unless configuration.complete?
-    huawei = Wireless::RuntimeParser.new.parse(:access_points, "ID MAC Name Group IP Type State STA Uptime\\nTotal: 0\\n", platform: :huawei, complete: true)
+    huawei = Wireless::RuntimeParser.new(platform: :huawei).parse(:access_points, "ID MAC Name Group IP Type State STA Uptime\\nTotal: 0\\n", complete: true)
     abort "Installed Huawei profile failed" unless huawei.complete? && huawei.records.empty?
     begin
-      Wireless::RuntimeParser.new.parse(:access_points, "", platform: :huawei, complete: "false")
+      Wireless::RuntimeParser.new(platform: :huawei).parse(:access_points, "", complete: "false")
       abort "Invalid completeness accepted"
     rescue ArgumentError
     end

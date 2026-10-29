@@ -22,6 +22,23 @@ module Wireless
 
     # 通过调用方持有的连接器顺序采集请求维度。
     def collect(connector:, target:, platform:, model: nil, dimensions: nil, ap_credentials: nil, ap_names: [])
+      unless connector.respond_to?(:open) && connector.respond_to?(:platform)
+        raise ArgumentError, "Connector must provide a platform and an open scope"
+      end
+      collect_request(connector: connector, target: target, platform: platform, model: model,
+        dimensions: dimensions, ap_credentials: ap_credentials, ap_names: ap_names)
+    end
+
+    # 借用已有会话；连接生命周期由调用方拥有，AP 操作仍遵循领域租约。
+    def collect_session(session:, target:, platform:, model: nil, dimensions: nil, ap_credentials: nil, ap_names: [])
+      collect_request(session: session, target: target, platform: platform, model: model,
+        dimensions: dimensions, ap_credentials: ap_credentials, ap_names: ap_names)
+    end
+
+    private
+
+    # 两个入口共享查询依赖、快照及完成判定，只有会话取得方式不同。
+    def collect_request(target:, platform:, model:, dimensions:, ap_credentials:, ap_names:, connector: nil, session: nil)
       platform = platform.to_s.dup.freeze
       model = model.dup.freeze if model.is_a?(String)
       raise ArgumentError, "Target must be a hash" unless target.is_a?(Hash)
@@ -45,12 +62,12 @@ module Wireless
       observations = requested.reject { |name| commands.key?(name) || (name == :lldp && profile.commands.key?(:lldp)) }
         .to_h { |name| [ name, unavailable_observation(name, :unsupported, :unsupported_platform_dimension) ] }
       queries = profile.queries(requested & commands.keys)
-      unless compatible_platform?(connector.platform, profile, model)
+      if connector && !compatible_platform?(connector.platform, profile, model)
         raise ArgumentError, "Wireless platform differs from the device connector"
       end
       collection = CtxRunner::Collection.new
-      collection.open(connector) do |session|
-        reader = CtxDriver::Reader.new(session: session, clock: @clock)
+      operation = lambda do |borrowed|
+        reader = CtxDriver::Reader.new(session: borrowed, clock: @clock)
         collection.stage = :prepare
         preparation = reader.read(profile.preparation_command)
         error = preparation.failure&.fetch(:code)
@@ -68,10 +85,11 @@ module Wireless
             unavailable_observation(:lldp, :failed, unavailable_code, skipped: true, stage: collection.stage)
           else
             ApCollection.new(clock: @clock, ap_session_factory: @ap_session_factory).collect(
-              session: session, access_points: observations[:access_points], credentials: ap_credentials, names: ap_names)
+              session: borrowed, access_points: observations[:access_points], credentials: ap_credentials, names: ap_names)
           end
         end
       end
+      connector ? collection.open(connector, &operation) : operation.call(session)
       if collection.failure
         code = collection.failure.fetch(:code)
         requested.each { |name| observations[name] ||= unavailable_observation(name, :failed, code, skipped: true, stage: collection.stage) }
@@ -81,10 +99,8 @@ module Wireless
       requested.each { |name| observations[name] ||= unavailable_observation(name, :failed, :session_not_opened, skipped: true) }
       status = observations.values.all?(&:complete?) ? :complete : observations.values.any?(&:available?) ? :partial : :failed
       observations[:collection] ||= Observation.new(name: :collection, status: status, completed_at: @clock.call)
-      Snapshot.new(target: target, dimensions: observations, observed_at: @clock.call)
+      Snapshot.new(target: target, observations: observations, observed_at: @clock.call)
     end
-
-    private
 
     # 连接器与请求通过同一 Registry 解析别名；未知平台沿用明确的不匹配错误。
     def compatible_platform?(platform, profile, model)

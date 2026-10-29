@@ -26,9 +26,9 @@ Gem::Specification.new do |spec|
   spec.executables = [ "wireless" ]
 
   spec.add_dependency "ctx_cli"
-  spec.add_dependency "ctx_runner"
-  spec.add_dependency "ctx_parser"
-  spec.add_dependency "ctx_driver"
+  spec.add_dependency "ctx_runner", ">= 0.3.0", "< 0.4"
+  spec.add_dependency "ctx_parser", ">= 0.3.0", "< 0.4"
+  spec.add_dependency "ctx_driver", ">= 0.3.0", "< 0.4"
   spec.add_dependency "date"
   %w[time json optparse yaml fileutils tempfile ipaddr].each { |name| spec.add_dependency name }
 end

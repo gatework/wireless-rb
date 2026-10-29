@@ -9,9 +9,9 @@ RSpec.describe "Wireless evidence contracts" do
   let(:body) { File.binread(File.join(root, "huawei_ap_all.txt")) }
 
   it "keeps decoded Huawei facts while withholding transport completeness" do
-    parser = Wireless::RuntimeParser.new
-    complete = parser.parse(:access_points, body, platform: :huawei, complete: true)
-    partial = parser.parse(:access_points, body, platform: :huawei, complete: false)
+    parser = Wireless::RuntimeParser.new(platform: :h3c)
+    complete = Wireless::RuntimeParser.new(platform: :huawei).parse(:access_points, body, complete: true)
+    partial = Wireless::RuntimeParser.new(platform: :huawei).parse(:access_points, body, complete: false)
     expect(partial).to be_partial
     expect(partial.records).to eq(complete.records)
   end
@@ -20,14 +20,14 @@ RSpec.describe "Wireless evidence contracts" do
     JSON.parse(File.read(File.join(root, "manifest.json"))).fetch("cases").each do |entry|
       input = File.binread(File.join(root, entry.fetch("file")))
       expect(Digest::SHA256.hexdigest(input)).to eq(entry.fetch("sha256"))
-      actual = Wireless::RuntimeParser.new.parse(:access_points, input, platform: entry.fetch("platform"), complete: true)
+      actual = Wireless::RuntimeParser.new(platform: entry.fetch("platform")).parse(:access_points, input, complete: true)
       expect(JSON.parse(JSON.generate(actual.to_h.slice(:status, :records, :issues)))).to eq(entry.fetch("expected"))
     end
   end
 
   it "withholds completeness when Huawei table totals or required identity fields are lost" do
     [ body.sub("Total: 3\n", ""), body.sub("0200-0000-0001", "invalid-mac") ].each do |text|
-      result = Wireless::RuntimeParser.new.parse(:access_points, text, platform: :huawei, complete: true)
+      result = Wireless::RuntimeParser.new(platform: :huawei).parse(:access_points, text, complete: true)
       expect(result).not_to be_complete
     end
   end
@@ -47,7 +47,7 @@ RSpec.describe "Wireless evidence contracts" do
     session = double("session", connected?: true)
     allow(session).to receive(:send_commands) do |commands|
       text = commands.first == "screen-length disable" ? "" : "Total number of APs : 0\n"
-      double("receipt", success?: true, steps: [ Object.new ], output: text, value!: text)
+      double("receipt", success?: true, steps: [ { command: commands.first } ], output: text, value!: text)
     end
     [ [ :fixture_h3c, :h3c ], [ :h3c, :fixture_h3c ] ].each do |requested, actual|
       connector = double("connector", platform: actual)

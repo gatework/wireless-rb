@@ -4,6 +4,10 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+## 0.7.0 (2026-10-29)
+
+- Move RuntimeParser platform to construction; add command provenance to parse/parse_many. Rename Snapshot Ruby members to observations/observation while retaining dimensions in persisted reports. Add Collector#collect_session for borrowed sessions. Use Catalog and shared Credentials in CLI; reject selected duplicate addresses across platforms before connecting.
+
 ## 0.6.2 (2026-10-25)
 
 - Extract AP neighbor selection, lazy credentials, receipt validation and coverage aggregation into ApCollection, preserving controller collection APIs and per-AP failure isolation.

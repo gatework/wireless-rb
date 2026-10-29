@@ -24,12 +24,12 @@ RSpec.describe "Wireless embedded Netdisco configuration" do
       [ "--config", @config, "--env-file", File.join(@directory, "fixture.env"), *args ])
   end
 
-  it "reads the inline source and applies YAML inventory rules through the real Fleet" do
+  it "reads the inline source and applies YAML inventory rules through the real Catalog" do
     rows = [ { "ip" => "192.0.2.10", "name" => "WLC", "vendor" => "H3C", "model" => "WX3540" },
       { "ip" => "192.0.2.11", "name" => "Spare-WLC", "vendor" => "H3C", "model" => "WX3540" },
       { "ip" => "192.0.2.12", "name" => "Switch", "vendor" => "H3C", "model" => "S6520" } ]
     source = double("remote inventory", devices: rows)
-    allow(Net::Connector::Netdisco::Fleet).to receive(:new).and_wrap_original do |original, **options|
+    allow(Net::Connector::Netdisco::Catalog).to receive(:new).and_wrap_original do |original, **options|
       @settings = options.fetch(:settings)
       original.call(**options, inventory: source)
     end

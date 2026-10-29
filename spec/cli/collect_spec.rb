@@ -31,7 +31,7 @@ RSpec.describe Wireless::CLI::Collect do
       Struct.new(:output, :steps, :body) do
         def success? = true
         def value! = body
-      end.new("#{command}\n#{body}<WLC>", [ Object.new ], body)
+      end.new("#{command}\n#{body}<WLC>", [ { command: command } ], body)
     end
   end
 
@@ -53,6 +53,58 @@ RSpec.describe Wireless::CLI::Collect do
     expect(run_cli(*args)).to eq(0)
     expect(JSON.parse(@out.string).map { |row| row.fetch("host") }).to eq([ "192.0.2.10" ])
     expect(Dir).not_to exist(File.join(@directory, "reports"))
+  end
+
+
+  it "rejects selected duplicate addresses across platforms but permits excluded duplicates" do
+    require "net/connector/netdisco"
+    config(devices: [], netdisco: { "url" => "https://netdisco.example" })
+    domain = { "vendor" => "H3C", "model" => "WX5004" }
+    inventory = Struct.new(:devices).new([
+      domain.merge("ip" => "192.0.2.10", "name" => "selected"),
+      { "ip" => "192.0.2.10", "vendor" => "Juniper", "os" => "JUNOS", "name" => "conflict" },
+      domain.merge("ip" => "192.0.2.11", "name" => "unique"),
+      { "ip" => "invalid", "vendor" => "H3C" }
+    ])
+    allow_any_instance_of(Net::Connector::Netdisco::Settings).to receive(:inventory).and_return(inventory)
+    @env.clear
+    expect(run_cli("--inventory-only", "--json", "--host", "192.0.2.10")).to eq(2)
+    expect(@error.string).to include("Duplicate management address")
+    expect(@out.string).to be_empty
+    @error.truncate(0)
+    expect(run_cli("--inventory-only", "--json", "--host", "192.0.2.11")).to eq(0)
+    expect(JSON.parse(@out.string).map { |row| row.fetch("host") }).to eq([ "192.0.2.11" ])
+    expect(@error.string).to include("duplicate_host=2", "invalid_address=1")
+    expect(Dir).not_to exist(File.join(@directory, "reports"))
+  end
+
+  it "uses the displayed fallback name when selecting unnamed duplicate addresses" do
+    require "net/connector/netdisco"
+    config(devices: [], netdisco: { "url" => "https://netdisco.example" })
+    domain = { "vendor" => "H3C", "model" => "WX5004" }
+    source = Struct.new(:devices).new([
+      domain.merge("ip" => "192.0.2.10"),
+      { "ip" => "192.0.2.10", "vendor" => "Juniper", "os" => "JUNOS" },
+      domain.merge("ip" => "192.0.2.11")
+    ])
+    allow_any_instance_of(Net::Connector::Netdisco::Settings).to receive(:inventory).and_return(source)
+    expect(run_cli("--plan", "--json", "--name", "192.0.2.10")).to eq(2)
+    expect(@out.string).to be_empty
+    expect(run_cli("--plan", "--json", "--exclude-name", "192.0.2.10")).to eq(0)
+    expect(JSON.parse(@out.string).map { |row| row.fetch("host") }).to eq([ "192.0.2.11" ])
+  end
+
+  it "preserves Netdisco platform names in include and exclude vendor filters" do
+    require "net/connector/netdisco"
+    config(devices: [], netdisco: { "url" => "https://netdisco.example" })
+    source = Struct.new(:devices).new([ { "ip" => "192.0.2.10", "vendor" => "H3C", "model" => "WX5004" } ])
+    allow_any_instance_of(Net::Connector::Netdisco::Settings).to receive(:inventory).and_return(source)
+    expect(run_cli("--plan", "--json", "--vendor", "h3c_wireless")).to eq(0)
+    expect(JSON.parse(@out.string).first).to include("platform" => "h3c_wireless")
+    @out.truncate(0)
+    @out.rewind
+    expect(run_cli("--plan", "--json", "--exclude-vendor", "h3c_wireless")).to eq(1)
+    expect(JSON.parse(@out.string)).to be_empty
   end
 
   def config(**overrides)

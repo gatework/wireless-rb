@@ -20,8 +20,8 @@ output = <<~CLI
    Noise floor : -90 dBm
    Max power : 20
 CLI
-observations = Wireless::RuntimeParser.new.parse_many(
-  %i[access_points radios], output, platform: "h3c", complete: true
+observations = Wireless::RuntimeParser.new(platform: "h3c").parse_many(
+  %i[access_points radios], output, complete: true
 )
 observations.each do |name, observation|
   puts "#{name}: #{observation.status}, records=#{observation.records.size}"

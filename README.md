@@ -75,8 +75,8 @@ output = <<~CLI
    Noise floor : -90 dBm
    Max power : 20
 CLI
-observations = Wireless::RuntimeParser.new.parse_many(
-  %i[access_points radios], output, platform: "h3c", complete: true
+observations = Wireless::RuntimeParser.new(platform: :h3c).parse_many(
+  %i[access_points radios], output, complete: true
 )
 observations.each do |name, observation|
   puts "#{name}: #{observation.status}, records=#{observation.records.size}"
@@ -86,7 +86,7 @@ end
 
 ## Public contract and limits
 
-`Config.new.parse(text, complete: false)` parses controller configuration. `RuntimeParser.new(model: nil).parse(name, text, platform: "h3c", complete: false)` parses one runtime dimension; `parse_many` shares parsing for dimensions from the same command. `NeighborParser` supplies the AP context to neighbor observations.
+`Config.new.parse(text, complete: false)` parses controller configuration. `RuntimeParser.new(platform: :h3c, model: nil).parse(name, text, complete: false, command: nil)` parses one runtime dimension; `parse_many` shares parsing for dimensions from the same command. `NeighborParser` supplies the AP context to neighbor observations.
 
 Invalid platform/model/dimension arguments and non-boolean `complete` raise `ArgumentError`; malformed device text produces a failed observation. The caller must establish input completeness. Unknown syntax, duplicate identities, count mismatches, and truncated output remain partial or failed. A configured maximum transmit power is not a current measured transmit power. PSKs, passwords, and authentication URLs must not enter snapshots.
 
@@ -167,3 +167,12 @@ MIT. See [LICENSE](LICENSE).
 Apply returns `2` on failure and `130` on interruption even if stderr cannot accept diagnostics. Existing execution journals retain uncertain device effects; commands are never replayed automatically. Unexpected positional arguments are rejected, including after `--help`.
 
 Offline review requires `snapshot.target.host` to match the canonical device host. Reports without target identity must be collected again; the unbound legacy format is no longer accepted.
+
+
+## API migration
+
+`RuntimeParser.new(platform:, model: nil)` fixes the platform for `parse(name, text, complete: false, command: nil)` and `parse_many(names, text, complete: false, command: nil)`. Snapshots use `observations:` and expose `observations` / `observation(name)`; the old Ruby `dimensions` member and Wireless `dimension` accessor are removed. Known missing dimensions return `not_requested`; unknown names raise `ArgumentError`. Persisted JSON keeps its `dimensions` field.
+
+`Collector#collect_session(session:, target:, platform:, ...)` runs the same collection plan using an already connected session without connecting or closing it. AP LLDP still requires an explicitly injected factory.
+
+Dynamic inventory uses `Netdisco::Catalog`. Any duplicate row for a selected address, including another platform, prevents connection; excluded conflicts retain safe diagnostics. `NC_<PLATFORM>_ENABLE_PASSWORD` takes precedence over `NC_ENABLE_PASSWORD`.

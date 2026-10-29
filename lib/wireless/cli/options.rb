@@ -5,7 +5,7 @@ require "optparse"
 require "ctx_cli/options"
 require "ctx_cli/terminal"
 require "ctx_cli/initializer"
-gem "net-connector", "~> 0.18.0"
+gem "net-connector", "~> 0.19.0"
 require "net/connector/inventory/filters"
 require "yaml"
 require "ipaddr"
@@ -111,7 +111,7 @@ module Wireless
         @inventory_public = schema.from_environment(defaults.merge(overrides), sections: sections)
         @netdisco_settings = Net::Connector::Netdisco::Settings.new(env: environment, defaults: defaults, overrides: overrides).for_run(mode: :inventory)
       rescue LoadError
-        raise LoadError, "Netdisco 清单需要 net-connector >= 0.18.0；请安装项目依赖", cause: nil
+        raise LoadError, "Netdisco 清单需要 net-connector >= 0.19.0；请安装项目依赖", cause: nil
       end
 
       # 外部清单同样按文件来源解析路径，并在预检时固定本批配置。
@@ -256,7 +256,7 @@ module Wireless
             path_literals: { "netdisco.db_sslrootcert" => [ "system" ], "ND_DB_SSLROOTCERT" => [ "system" ] }, **@discovery)
         end
       rescue LoadError
-        raise LoadError, "统一配置加载需要 net-connector >= 0.18.0；请安装项目依赖", cause: nil
+        raise LoadError, "统一配置加载需要 net-connector >= 0.19.0；请安装项目依赖", cause: nil
       end
 
       # 各环境层仅编码宿主支持的公开字段，凭据始终留在环境快照。

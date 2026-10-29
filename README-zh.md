@@ -76,8 +76,8 @@ output = <<~CLI
    Noise floor : -90 dBm
    Max power : 20
 CLI
-observations = Wireless::RuntimeParser.new.parse_many(
-  %i[access_points radios], output, platform: "h3c", complete: true
+observations = Wireless::RuntimeParser.new(platform: :h3c).parse_many(
+  %i[access_points radios], output, complete: true
 )
 observations.each do |name, observation|
   puts "#{name}: #{observation.status}, records=#{observation.records.size}"
@@ -91,7 +91,7 @@ end
 
 `NeighborParser#parse` 对非法 AP 名称及非文本输入同样抛出 `ArgumentError`；平台不支持的维度返回 `unsupported`。`Observation` 时间戳只接受 `Time` 或 `nil`，通过 `with` 替换时同样校验。
 
-`Config.new.parse(text, complete: false)` 解析控制器配置。`RuntimeParser.new(model: nil).parse(name, text, platform: "h3c", complete: false)` 解析单个运行维度；`parse_many` 为同一命令的多个维度共享解析。`NeighborParser` 为邻居观察补充 AP 上下文。
+`Config.new.parse(text, complete: false)` 解析控制器配置。`RuntimeParser.new(platform: :h3c, model: nil).parse(name, text, complete: false, command: nil)` 解析单个运行维度；`parse_many` 为同一命令的多个维度共享解析。`NeighborParser` 为邻居观察补充 AP 上下文。
 
 输入完整性由调用方确认。未知语法、身份重复、数量矛盾和截断输出保持部分或失败。配置中的最大发射功率不能当作当前测量功率；PSK、密码、认证 URL 不可进入快照。
 
@@ -166,3 +166,12 @@ MIT，见 [LICENSE](LICENSE)。
 ## 修复建议
 
 `wireless collect` 默认输出逐设备诊断，使用 `--scripts` 可选导出配置建议；`wireless review --batch DIR` 可离线补生成既有报告的候选配置、条件回退和只读验收命令。导出不会执行变更；独立 `apply --plan FILE` 必须在真实终端明确确认，配置漂移或失败即停止。详见[修复建议说明](docs/remediation.md)。
+
+
+## API 迁移
+
+`RuntimeParser.new(platform:, model: nil)` 固定解析平台；`parse(name, text, complete: false, command: nil)` 与 `parse_many(names, text, complete: false, command: nil)` 返回领域 Observation。`Snapshot.new(observations: ...)`、`#observations`、`#observation(name)` 是统一 Ruby API，旧 `dimensions` 成员及 Wireless `dimension` 入口已移除。已知未请求维度返回 `not_requested`，未知名称抛出 `ArgumentError`；持久化 JSON 仍保留 `dimensions` 字段。
+
+`Collector#collect_session(session:, target:, platform:, ...)` 借用已连接会话，与 `collect` 使用同一采集计划；不连接或关闭控制器会话。AP LLDP 仍由显式注入的工厂负责。
+
+动态清单使用 `Netdisco::Catalog`；选中地址的任何重复记录（包括另一平台）都会阻止连接。范围外冲突只输出安全诊断。平台 `NC_<PLATFORM>_ENABLE_PASSWORD` 优先于 `NC_ENABLE_PASSWORD`。

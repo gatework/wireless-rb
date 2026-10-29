@@ -39,7 +39,7 @@ RSpec.describe Wireless::Fields do
     oversized = "9" * 400
     { "RSSI" => oversized, "Rx/Tx rate" => "#{oversized}/1 Mbps" }.each do |field, value|
       text = "Total number of clients : 1\nMAC address : 0200-0000-0101\n#{field} : #{value}\n"
-      observation = Wireless::RuntimeParser.new.parse(:clients, text, complete: true)
+      observation = Wireless::RuntimeParser.new(platform: :h3c).parse(:clients, text, complete: true)
 
       expect(observation).to be_partial
       expect(only_record(observation.records)).to eq(client_mac: "02:00:00:00:01:01")

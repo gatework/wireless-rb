@@ -35,25 +35,34 @@ module Wireless
       def load_network
         require "net/connector"
       rescue LoadError
-        raise LoadError, "联网采集需要 net-connector >= 0.18.0；请在宿主 Gemfile 添加或 gem install net-connector", cause: nil
+        raise LoadError, "联网采集需要 net-connector >= 0.19.0；请在宿主 Gemfile 添加或 gem install net-connector", cause: nil
       end
 
-      # YAML 静态设备或显式 Netdisco 来源二选一；所有重复地址在连接前拒绝。
+      # YAML 静态设备或显式 Netdisco 来源二选一；选中地址的所有冲突记录在连接前拒绝。
       def inventory(options, progress:)
         values = options.values
+        selection = Net::Connector::Inventory::Filters.selection(values)
         rows = if values["netdisco_config"] || values["netdisco"] || values["inventory"]
           progress.reading_inventory
           settings = options.netdisco_settings
-          Net::Connector::Netdisco::Fleet.new(settings: settings).devices.filter_map do |device|
-            next unless device.ready? && %i[h3c_wireless huawei].include?(device.vendor)
-            { "host" => device.host, "name" => device.name || device.host, "model" => device.model, "platform" => device.vendor.to_s }
+          policy = settings.snapshot(mode: :inventory)
+          devices = Net::Connector::Netdisco::Catalog.new(settings: settings).devices(policy: policy)
+          devices.filter_map(&:issue).tally.each { |code, count| progress.notice("Inventory: #{code}=#{count}") }
+          devices.filter_map do |device|
+            next unless %i[h3c_wireless huawei].include?(device.vendor)
+            platform = device.vendor.to_s
+            if device.issue == :duplicate_host && policy.rules.selected?(device.host, device.vendor, name: device.name, model: device.model) &&
+                selection.selected?(device.host, platform, name: device.name || device.host, model: device.model)
+              raise CtxCli::Collection::Error, "Duplicate management address in selected inventory"
+            end
+            next unless device.ready?
+            { "host" => device.host, "name" => device.name || device.host, "model" => device.model, "platform" => platform }
           end
         else
           values.fetch("devices")
         end
         targets = options.normalize_devices(rows)
         total = targets.size
-        selection = Net::Connector::Inventory::Filters.selection(values)
         selected = targets.select do |device|
           selection.selected?(device.fetch("host"), device.fetch("platform"), name: device["name"], model: device["model"])
         end
@@ -87,11 +96,10 @@ module Wireless
 
       # 缺失用户名时不尝试连接；密码允许省略以支持明确的 SSH key/agent。
       def credentials!(device, options)
-        prefix = device.fetch("platform") == "huawei" ? "NC_HUAWEI" : "NC_H3C_WIRELESS"
-        username = secret(options, "#{prefix}_USERNAME") || secret(options, "NC_DEVICE_USERNAME")
-        raise CtxCli::Collection::Error, "请设置 NC_DEVICE_USERNAME 或 平台 NC_*_USERNAME；密码可通过环境或 SSH key/agent 提供" unless username
-        options.values.fetch("ssh").transform_keys(&:to_sym).merge(username: username,
-          password: secret(options, "#{prefix}_PASSWORD") || secret(options, "NC_DEVICE_PASSWORD"), enable_password: secret(options, "NC_ENABLE_PASSWORD"))
+        require "net/connector/credentials"
+        credentials = Net::Connector::Credentials.new(env: options.environment).resolve(platform: (device.fetch("platform") == "huawei" ? :huawei : :h3c_wireless))
+        raise CtxCli::Collection::Error, "Set NC_DEVICE_USERNAME or platform NC_*_USERNAME; provide a password through the environment or use an SSH key/agent" unless credentials
+        options.values.fetch("ssh").transform_keys(&:to_sym).merge(credentials)
       end
 
       # 空白环境值视为缺失，不修改或回显凭据。

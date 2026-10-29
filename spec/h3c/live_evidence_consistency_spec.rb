@@ -3,7 +3,7 @@
 require_relative "../spec_helper"
 
 RSpec.describe "H3C live output consistency" do
-  let(:parser) { Wireless::RuntimeParser.new }
+  let(:parser) { Wireless::RuntimeParser.new(platform: :h3c) }
 
   it "keeps repeated indistinguishable conflict events partial while preserving later occurrences" do
     text = File.read(File.expand_path("../fixtures/wireless/client_ip_conflicts_repeated.txt", __dir__))

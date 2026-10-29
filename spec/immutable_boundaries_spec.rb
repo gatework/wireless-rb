@@ -54,7 +54,7 @@ RSpec.describe "Immutable facts and evidence" do
       dimensions = { configuration: domain::Observation.new(name: :configuration, status: :complete) }
       target = { host: +"192.0.2.1", attributes: { serial: +"leaf-1" } }
       attributes = {}
-      value = domain::Snapshot.new(target: target, dimensions: dimensions, observed_at: Time.now, **attributes)
+      value = domain::Snapshot.new(target: target, observations: dimensions, observed_at: Time.now, **attributes)
       dimensions.clear
       target[:host].replace("192.0.2.2")
       attributes[:fabric_key]&.clear
@@ -62,7 +62,7 @@ RSpec.describe "Immutable facts and evidence" do
       expect(value).to be_complete
       expect(value.target[:host]).to eq("192.0.2.1")
       expect(value.fabric_key).to eq("LAB") if attributes.key?(:fabric_key)
-      expect { value.dimensions.clear }.to raise_error(FrozenError)
+      expect { value.observations.clear }.to raise_error(FrozenError)
       expect { value.target[:attributes][:serial].clear }.to raise_error(FrozenError)
       expect(value.observed_at).to be_frozen
     end
@@ -93,16 +93,16 @@ RSpec.describe "Immutable facts and evidence" do
     [ Hash.new({ secret: +"PRIVATE_DEFAULT" }), Hash.new { raise "caller callback" } ].each do |dimensions|
       observation = Wireless::Observation.new(name: :clients, status: :complete)
       dimensions[:clients] = observation
-      snapshot = Wireless::Snapshot.new(target: {}, dimensions: dimensions)
-      expect(snapshot.dimensions[:missing]).to be_nil
-      expect(snapshot.dimensions[:clients]).to equal(observation)
+      snapshot = Wireless::Snapshot.new(target: {}, observations: dimensions)
+      expect(snapshot.observations[:missing]).to be_nil
+      expect(snapshot.observations[:clients]).to equal(observation)
     end
   end
 
   it "keeps fact, target and projection contents out of display strings" do
     observation = Wireless::Observation.new(name: :clients, status: :complete,
       records: [ { username: "PRIVATE_FACT" } ], evidence: [ { detail: "PRIVATE_EVIDENCE" } ])
-    snapshot = Wireless::Snapshot.new(target: { secret: "PRIVATE_TARGET" }, dimensions: { clients: observation })
+    snapshot = Wireless::Snapshot.new(target: { secret: "PRIVATE_TARGET" }, observations: { clients: observation })
     projection = Wireless::Projection.new(dimensions: { clients: { status: :complete, detail: "PRIVATE_PROJECTION" } })
     [ observation, snapshot, projection ].each do |value|
       expect(value.inspect).not_to include("PRIVATE_")

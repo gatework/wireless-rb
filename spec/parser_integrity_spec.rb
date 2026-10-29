@@ -3,7 +3,7 @@
 require_relative "spec_helper"
 
 RSpec.describe "Wireless parser integrity" do
-  let(:parser) { Wireless::RuntimeParser.new }
+  let(:parser) { Wireless::RuntimeParser.new(platform: :h3c) }
   let(:client) { "MAC address : 0200-0000-0101\n" }
 
   it "rejects contradictory or malformed totals throughout H3C and Huawei output" do
@@ -13,7 +13,7 @@ RSpec.describe "Wireless parser integrity" do
     end
     header = "ID MAC Name Group IP Type State STA Uptime\n"
     text = "#{header}0 0200-0000-0007 AP-HW LAB 192.0.2.7 AP6050 nor 0 001:02:03:04\nTotal: 2\nTotal: 1\n"
-    expect(parser.parse(:access_points, text, platform: :huawei, complete: true)).not_to be_complete
+    expect(Wireless::RuntimeParser.new(platform: :huawei).parse(:access_points, text, complete: true)).not_to be_complete
     expect(parser.parse(:blocked_clients, "0200-0000-0101 reason\nTotal: 1\nTotal: 2\n", complete: true)).not_to be_complete
   end
 
@@ -127,7 +127,7 @@ RSpec.describe "Wireless parser integrity" do
   it "rejects Huawei station IPv6 columns containing IPv4 addresses" do
     header = "STA MAC AP ID Ap name Rf/WLAN\n"
     text = "#{header}0200-0000-0101 1 AP-A 1/1 5G ax 1/2 -60 100 192.0.2.1 Lab run 192.0.2.2 0 1h\nTotal: 1\n"
-    result = parser.parse(:clients, text, platform: :huawei, complete: true)
+    result = Wireless::RuntimeParser.new(platform: :huawei).parse(:clients, text, complete: true)
     expect(result).not_to be_complete
     expect(result.records).to be_empty
   end
@@ -135,7 +135,7 @@ RSpec.describe "Wireless parser integrity" do
   it "enforces the same VLAN bounds for Huawei stations and H3C clients" do
     [ 0, 4095 ].each do |vlan|
       text = "STA MAC AP ID Ap name Rf/WLAN\n0200-0000-0101 1 AP-A 1/1 5G ax 1/2 -60 #{vlan} 192.0.2.1 Lab run 2001:db8::1 0 1h\nTotal: 1\n"
-      result = parser.parse(:clients, text, platform: :huawei, complete: true)
+      result = Wireless::RuntimeParser.new(platform: :huawei).parse(:clients, text, complete: true)
       expect(result).not_to be_complete
       expect(result.records).to be_empty
       result = parser.parse(:clients, "Total: 1\n#{client}VLAN ID: #{vlan}\n", complete: true)
@@ -144,7 +144,7 @@ RSpec.describe "Wireless parser integrity" do
     end
     [ 1, 4094 ].each do |vlan|
       text = "STA MAC AP ID Ap name Rf/WLAN\n0200-0000-0101 1 AP-A 1/1 5G ax 1/2 -60 #{vlan} 192.0.2.1 Lab run 2001:db8::1 0 1h\nTotal: 1\n"
-      result = parser.parse(:clients, text, platform: :huawei, complete: true)
+      result = Wireless::RuntimeParser.new(platform: :huawei).parse(:clients, text, complete: true)
       expect(result).to be_complete
       expect(result.records.first[:vlan]).to eq(vlan)
       result = parser.parse(:clients, "Total: 1\n#{client}VLAN ID: #{vlan}\n", complete: true)

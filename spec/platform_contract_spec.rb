@@ -4,12 +4,12 @@ require_relative "spec_helper"
 
 RSpec.describe "Wireless platform contracts" do
   it "rejects malformed caller arguments before examining device output" do
-    parser = Wireless::RuntimeParser.new
+    parser = Wireless::RuntimeParser.new(platform: :h3c)
     %i[h3c huawei].each do |platform|
-      expect { parser.parse(:access_points, "Total: 0\n", platform: platform, complete: "false") }.to raise_error(ArgumentError)
-      expect { parser.parse_many([ :clients, :clients ], "", platform: platform) }.to raise_error(ArgumentError)
+      expect { Wireless::RuntimeParser.new(platform: platform).parse(:access_points, "Total: 0\n", complete: "false") }.to raise_error(ArgumentError)
+      expect { Wireless::RuntimeParser.new(platform: platform).parse_many([ :clients, :clients ], "") }.to raise_error(ArgumentError)
     end
-    expect { parser.parse(:clients, "", platform: :unknown) }.to raise_error(ArgumentError)
+    expect { Wireless::RuntimeParser.new(platform: :unknown).parse(:clients, "") }.to raise_error(ArgumentError)
     expect { Wireless::Config.new.parse("sysname LAB\n", complete: "true") }.to raise_error(ArgumentError)
   end
 
@@ -30,18 +30,18 @@ RSpec.describe "Wireless platform contracts" do
     allow(session).to receive(:send_commands) do |queries|
       commands.concat(queries)
       body = queries.first == "display ap all" ? "ID MAC Name Group IP Type State STA Uptime\nTotal: 0\n" : ""
-      double("Receipt", output: body, success?: true, steps: [ Object.new ], value!: body)
+      double("Receipt", output: body, success?: true, steps: [ { command: queries.first } ], value!: body)
     end
     result = Wireless::Collector.new.collect(connector: connector, target: { host: "192.0.2.1" }, platform: :huawei,
       dimensions: [ :access_points, :radios ])
     expect(commands).to eq([ "screen-length 0 temporary", "display ap all" ])
-    expect(result.dimension(:access_points)).to be_complete
-    expect(result.dimension(:radios).status).to eq(:unsupported)
+    expect(result.observation(:access_points)).to be_complete
+    expect(result.observation(:radios).status).to eq(:unsupported)
   end
 
   it "keeps invalid encoded device bodies as failed observations" do
     %i[h3c huawei].each do |platform|
-      result = Wireless::RuntimeParser.new.parse(:access_points, "\xff".b, platform: platform, complete: true)
+      result = Wireless::RuntimeParser.new(platform: platform).parse(:access_points, "\xff".b, complete: true)
       expect(result.status).to eq(:failed)
     end
   end
@@ -58,13 +58,13 @@ RSpec.describe "Wireless platform contracts" do
       when "display station all" then "STA MAC AP ID Ap name Rf/WLAN\nTotal: 0\n"
       else ""
       end
-      double("Receipt", output: body, success?: true, steps: [ Object.new ], value!: body)
+      double("Receipt", output: body, success?: true, steps: [ { command: queries.first } ], value!: body)
     end
 
     result = Wireless::Collector.new.collect(connector: connector, target: { host: "192.0.2.1" }, platform: :huawei)
 
     expect(result).to be_complete
-    expect(result.dimensions.keys).to contain_exactly(:access_points, :clients, :collection)
+    expect(result.observations.keys).to contain_exactly(:access_points, :clients, :collection)
     expect(commands).to eq([ "screen-length 0 temporary", "display ap all", "display station all" ])
   end
 end

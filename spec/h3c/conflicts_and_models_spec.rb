@@ -3,7 +3,7 @@
 require_relative "../spec_helper"
 
 RSpec.describe "H3C conflict and AP model observations" do
-  let(:parser) { Wireless::RuntimeParser.new }
+  let(:parser) { Wireless::RuntimeParser.new(platform: :h3c) }
   let(:conflicts) { File.read(File.expand_path("../fixtures/wireless/client_ip_conflicts.txt", __dir__)) }
   let(:models) { File.read(File.expand_path("../fixtures/wireless/ap_models.txt", __dir__)) }
 
@@ -59,7 +59,7 @@ RSpec.describe "H3C conflict and AP model observations" do
       result = parser.parse(name, "% Unrecognized command found at '^' position.\n", complete: true)
       expect(result.status).to eq(:unsupported)
       expect(result.records).to be_empty
-      expect(parser.parse(name, "", platform: "huawei", complete: true).status).to eq(:unsupported)
+      expect(Wireless::RuntimeParser.new(platform: "huawei").parse(name, "", complete: true).status).to eq(:unsupported)
     end
   end
 
