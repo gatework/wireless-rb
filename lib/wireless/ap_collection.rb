@@ -54,7 +54,8 @@ module Wireless
           collected = read_ap_neighbors(ap_session, ap)
           records.concat(collected.fetch(:records))
           issues.concat(collected.fetch(:issues))
-          evidence << collected.fetch(:evidence)
+          source = collected.fetch(:evidence)
+          evidence << source.slice(:command, :sha256, :bytes, :observed_at, :status).merge(context: source.except(:command, :sha256, :bytes, :observed_at, :status))
         end
       end
       status = issues.empty? ? :complete : records.any? || evidence.any? { |entry| entry[:status] == :complete } ? :partial : :failed
@@ -84,7 +85,7 @@ module Wireless
           raise TypeError, "AP capture must match the requested LLDP command"
         end
         # 回执补充摘要与时间；AP 身份、命令和尝试状态始终由本次请求确定。
-        source = (result.evidence.first || {}).merge(source)
+        source = (result.evidence.first&.to_h || {}).except(:context).merge(source)
         source[:attempted] = false if result.skipped?
       end
       # 适配器错误只接受稳定代码；非法字段不泄露正文，也不丢弃已取得的邻居事实。

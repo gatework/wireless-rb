@@ -11,7 +11,7 @@ module Wireless
     include CtxRunner::Document::Value
     extend Forwardable
     def_delegators :@snapshot, :target, :observations, :observed_at, :issues, :collection_status,
-      :observation, :complete?, :same_target?
+      :observation, :records, :complete?, :same_target?
     DIMENSIONS = SUPPORTED_DIMENSIONS
 
     def initialize(target:, observations:, observed_at: Time.now.utc, issues: [])
@@ -21,7 +21,6 @@ module Wireless
     end
 
     def to_h = @snapshot.to_h
-    def records(name) = observation(name).records
     def inspect = "#<#{self.class.name} collection_status=#{collection_status}>"
     alias to_s inspect
     def pretty_print(printer) = printer.text(inspect)

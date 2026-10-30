@@ -44,7 +44,7 @@ RSpec.describe Wireless::Collector do
     result = collect(:access_points, :radios)
 
     expect(result).to be_complete
-    expect(result.target).to eq(target)
+    expect(result.target.to_h).to eq(target.merge(platform: "h3c"))
     expect(result.observation(:access_points)).to be_complete
     expect(result.observation(:radios)).to be_complete
     expect(session).to have_received(:send_commands).with([ "display wlan ap all verbose" ]).once
@@ -107,10 +107,10 @@ RSpec.describe Wireless::Collector do
       %i[access_points radios].each do |name|
         expect(result.observation(name).status).to eq(status)
         expect(result.observation(name).issues).to eq([ { code: code } ])
-        expect(result.observation(name).evidence).to contain_exactly(include(command: "display wlan ap all verbose"))
+        expect(result.observation(name).evidence.map(&:to_h)).to contain_exactly(include(command: "display wlan ap all verbose"))
       end
       expect(result.observation(:access_points).started_at).to eq(result.observation(:radios).started_at)
-      expect(result.observation(:access_points).evidence).to eq(result.observation(:radios).evidence)
+      expect(result.observation(:access_points).evidence.map(&:to_h)).to eq(result.observation(:radios).evidence.map(&:to_h))
       expect(result.observation(:clients)).to be_complete
       expect(result.collection_status).to eq(:partial)
     end
@@ -158,14 +158,14 @@ RSpec.describe Wireless::Collector do
     now = Time.utc(2026, 10, 17)
     capture = CtxDriver::Capture.new(command: "display lldp neighbor-information verbose",
       body: "No LLDP neighbors\n", started_at: now, completed_at: now,
-      evidence: [ { sha256: "synthetic", bytes: 18 } ])
+      evidence: [ { sha256: "a" * 64, bytes: 18 } ])
     expect(ap_reader).to receive(:read).with(access_point: include(name: "AP-LAB")).and_return(result: capture)
     factory = double("AP session factory")
     expect(factory).to receive(:call).with(controller: session).once.and_return(ap_reader)
     reader = described_class.new(ap_session_factory: factory)
     result = reader.collect(connector: connector, target: target, platform: :h3c, dimensions: [ :lldp ])
     expect(result.observation(:lldp)).to be_complete
-    expect(result.observation(:lldp).evidence.first).to include(ap_name: "AP-LAB", attempted: true, status: :complete)
+    expect(result.observation(:lldp).evidence.first.to_h).to include(status: :complete, context: include(ap_name: "AP-LAB", attempted: true))
   end
 
   it "does not repeat AP enrichment when the connector yields again" do
@@ -178,7 +178,7 @@ RSpec.describe Wireless::Collector do
       platform: :h3c, dimensions: [ :lldp ])
 
     expect(result.issues).to eq([ { code: :session_reentered, stage: :close } ])
-    expect(result.observation(:lldp).evidence).to contain_exactly(include(ap_name: "AP-LAB", attempted: false))
+    expect(result.observation(:lldp).evidence.map(&:to_h)).to contain_exactly(include(context: include(ap_name: "AP-LAB", attempted: false)))
     expect(factory).to have_received(:call).with(controller: session).once
     expect(ap_reader).to have_received(:read).with(access_point: include(name: "AP-LAB")).once
   end
@@ -202,16 +202,16 @@ RSpec.describe Wireless::Collector do
     now = Time.utc(2026, 10, 17)
     command = Wireless::H3c::Profile::COMMANDS.fetch(:lldp)
     capture = CtxDriver::Capture.new(command: command, body: "No LLDP neighbors\n", started_at: now, completed_at: now,
-      evidence: [ { sha256: "synthetic", observed_at: now.iso8601, kind: :other, ap_name: "OTHER-AP",
-        command: "unrelated-command", attempted: false, status: :failed, neighbor_count: 99 } ])
+      evidence: [ { sha256: "a" * 64, bytes: 18, observed_at: now.iso8601,
+        command: "unrelated-command", status: :failed, context: { kind: :other, ap_name: "OTHER-AP", attempted: false, neighbor_count: 99 } } ])
     ap_reader = double("AP reader", read: { result: capture })
     reader = described_class.new(ap_session_factory: ->(controller:) { ap_reader })
 
     result = reader.collect(connector: connector, target: target, platform: :h3c, dimensions: [ :lldp ])
 
     expect(result.observation(:lldp)).to be_complete
-    expect(result.observation(:lldp).evidence).to eq([ { sha256: "synthetic", observed_at: now.iso8601,
-      kind: :ap_lldp_result, ap_name: "AP-LAB", command: command, attempted: true, status: :complete, neighbor_count: 0 } ])
+    expect(result.observation(:lldp).evidence.map(&:to_h)).to eq([ { sha256: "a" * 64, bytes: 18, observed_at: now.iso8601(6),
+      command: command, status: :complete, context: { kind: :ap_lldp_result, ap_name: "AP-LAB", attempted: true, neighbor_count: 0 } } ])
   end
 
   it "rejects wrong-command and skipped successful AP captures without losing controller facts" do
@@ -229,7 +229,7 @@ RSpec.describe Wireless::Collector do
       expect(result.observation(:access_points)).to be_complete
       expect(result.observation(:lldp).status).to eq(:failed)
       expect(result.observation(:lldp).issues).to include(include(code: :invalid_command_result, stage: :response, ap_name: "AP-LAB"))
-      expect(result.observation(:lldp).evidence.first).to include(ap_name: "AP-LAB", status: :failed, neighbor_count: 0)
+      expect(result.observation(:lldp).evidence.first.to_h).to include(status: :failed, context: include(ap_name: "AP-LAB", neighbor_count: 0))
     end
   end
 
@@ -244,7 +244,7 @@ RSpec.describe Wireless::Collector do
       expect(result.observation(:access_points)).to be_complete
       expect(result.observation(:clients)).to be_complete
       expect(result.observation(:lldp).issues).to include(include(code: :invalid_command_result, stage: :response))
-      expect(result.observation(:lldp).evidence.first).to include(ap_name: "AP-LAB", attempted: true, status: :failed)
+      expect(result.observation(:lldp).evidence.first.to_h).to include(status: :failed, context: include(ap_name: "AP-LAB", attempted: true))
     end
   end
 
@@ -262,9 +262,9 @@ RSpec.describe Wireless::Collector do
 
       expect(result.observation(:access_points)).to be_complete
       expect(result.observation(:lldp)).to be_partial
-      expect(result.records(:lldp)).to contain_exactly(include(ap_name: "AP-LAB", local_interface: "GE1", remote_interface: "GE2"))
+      expect(result.records(:lldp)).to contain_exactly(include(local_interface: "GE1", remote_interface: "GE2", ap_name: "AP-LAB"))
       expect(result.observation(:lldp).issues).to eq([ { code: :invalid_command_result, ap_name: "AP-LAB" } ])
-      expect(result.observation(:lldp).evidence.first).to include(status: :failed, neighbor_count: 1)
+      expect(result.observation(:lldp).evidence.first.to_h).to include(status: :failed, context: include(neighbor_count: 1))
     end
   end
 
@@ -281,7 +281,7 @@ RSpec.describe Wireless::Collector do
 
     expect(result.observation(:access_points)).to be_complete
     expect(result.observation(:lldp).issues).to eq([ { code: :session_closed, stage: :session, error_type: "IOError", ap_name: "AP-LAB" } ])
-    expect(result.observation(:lldp).evidence.first).to include(attempted: false, status: :failed)
+    expect(result.observation(:lldp).evidence.first.to_h).to include(status: :failed, context: include(attempted: false))
   end
 
   it "combines AP skipped flags and does not repeat the capture failure as an outcome error" do
@@ -295,7 +295,7 @@ RSpec.describe Wireless::Collector do
     result = reader.collect(connector: connector, target: target, platform: :h3c, dimensions: [ :lldp ])
 
     expect(result.observation(:lldp).issues).to eq([ { code: :session_closed, stage: :session, ap_name: "AP-LAB" } ])
-    expect(result.observation(:lldp).evidence.first).to include(attempted: false, status: :failed)
+    expect(result.observation(:lldp).evidence.first.to_h).to include(status: :failed, context: include(attempted: false))
   end
 
   it "does not construct an AP reader or resolve credentials for an empty complete inventory" do
@@ -332,7 +332,7 @@ RSpec.describe Wireless::Collector do
       operation.call(session)
     end
     result = collect(:access_points)
-    expect(result.target[:host]).to eq("192.0.2.10")
+    expect(result.target.host).to eq("192.0.2.10")
     expect(target[:host]).to eq("192.0.2.99")
   end
 
@@ -376,7 +376,7 @@ RSpec.describe Wireless::Collector do
 
     expect(result.observation(:access_points)).to be_complete
     expect(result.records(:access_points)).to eq([ { name: "AP-SELECTED" } ])
-    expect(result.observation(:access_points).evidence).to contain_exactly(include(command: command))
+    expect(result.observation(:access_points).evidence.map(&:to_h)).to contain_exactly(include(command: command))
     expect(result.observation(:access_points).started_at).to be_a(Time)
     expect(result.observation(:access_points).completed_at).to be_a(Time)
   end
@@ -405,7 +405,7 @@ RSpec.describe Wireless::Collector do
     end
     result = described_class.new(ap_session_factory: factory).collect(connector: connector, target: target,
       platform: :h3c, dimensions: [ :lldp ], ap_names: selected)
-    expect(result.observation(:lldp).evidence.map { |entry| entry[:ap_name] }).to eq([ "AP-1" ])
+    expect(result.observation(:lldp).evidence.map { |entry| entry.context[:ap_name] }).to eq([ "AP-1" ])
   end
 
   it "retains acquired facts when closing the injected session fails" do

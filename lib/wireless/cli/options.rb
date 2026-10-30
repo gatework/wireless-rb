@@ -5,7 +5,7 @@ require "optparse"
 require "ctx_cli/options"
 require "ctx_cli/terminal"
 require "ctx_cli/initializer"
-gem "net-connector", "~> 0.20.0"
+gem "net-connector", "~> 0.21.0"
 require "net/connector/inventory/filters"
 require "yaml"
 require "ipaddr"
@@ -111,7 +111,7 @@ module Wireless
         @inventory_public = schema.from_environment(defaults.merge(overrides), sections: sections)
         @netdisco_settings = Net::Connector::Netdisco::Settings.new(env: environment, defaults: defaults, overrides: overrides).for_run(mode: :inventory)
       rescue LoadError
-        raise LoadError, "Netdisco 清单需要 net-connector >= 0.20.0；请安装项目依赖", cause: nil
+        raise LoadError, "Netdisco 清单需要 net-connector >= 0.21.0；请安装项目依赖", cause: nil
       end
 
       # 外部清单同样按文件来源解析路径，并在预检时固定本批配置。
@@ -193,7 +193,7 @@ module Wireless
         %w[name model].each { |key| raise ArgumentError, "设备 #{key} 须为非空字符串" if row.key?(key) && !row[key].nil? && (!row[key].is_a?(String) || row[key].strip.empty?) }
         platform = row["platform"] || values.fetch("platform")
         raise ArgumentError, "设备 platform 无效" unless Wireless::SUPPORTED_PLATFORMS.include?(platform)
-        { "platform" => platform, "host" => host, "name" => row["name"] || host, "model" => row["model"] }.freeze
+        { "platform" => Wireless::ParserRegistry.canonical(platform).to_s, "host" => host, "name" => row["name"] || host, "model" => row["model"] }.freeze
       rescue IPAddr::Error
         raise ArgumentError, "设备 host 无效", cause: nil
       end
@@ -256,7 +256,7 @@ module Wireless
             path_literals: { "netdisco.db_sslrootcert" => [ "system" ], "ND_DB_SSLROOTCERT" => [ "system" ] }, **@discovery)
         end
       rescue LoadError
-        raise LoadError, "统一配置加载需要 net-connector >= 0.20.0；请安装项目依赖", cause: nil
+        raise LoadError, "统一配置加载需要 net-connector >= 0.21.0；请安装项目依赖", cause: nil
       end
 
       # 各环境层仅编码宿主支持的公开字段，凭据始终留在环境快照。

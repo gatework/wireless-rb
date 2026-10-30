@@ -3,6 +3,7 @@
 require "ctx_runner/evidence"
 require_relative "h3c/profile"
 require_relative "change_plan"
+require_relative "fields"
 
 module Wireless
   # 控制器事实与建议分离；配置加固是条件候选，不自动改变无线业务。
@@ -13,7 +14,7 @@ module Wireless
     def initialize(document)
       @document = document
       @dimensions = document.dig("snapshot", "observations") || {}
-      @h3c = document.dig("device", "platform") == "h3c_wireless"
+      @h3c = document.dig("target", "platform") == "h3c"
     end
 
     # 未覆盖的平台明确保留范围限制，不能输出其他厂商的配置命令。
@@ -27,9 +28,9 @@ module Wireless
         end
         items.concat(runtime_tasks)
       else
-        items << item("platform_not_supported", "platform", "此平台尚未提供修复规则", evidence: @document.dig("device", "platform"), verify: []).merge(status: "blocked")
+        items << item("platform_not_supported", "platform", "此平台尚未提供修复规则", evidence: @document.dig("target", "platform"), verify: []).merge(status: "blocked")
       end
-      { schema_version: CtxRunner::Evidence::VERSION, kind: "recommendations", review_only: true, health_assessment: "not_performed", device: @document["device"],
+      { schema_version: CtxRunner::Evidence::VERSION, kind: "recommendations", review_only: true, health_assessment: "not_performed", target: @document["target"],
         observed_at: @document.dig("snapshot", "observed_at"), items: items, counts: items.map { |entry| entry[:status] }.tally }
     end
 
@@ -132,7 +133,7 @@ module Wireless
             prerequisites: [ "事件时间不含年份，不据此判断当前仍冲突；先重采并对照新旧 MAC/AP、DHCP 租约、静态地址和漫游记录。", "定位具体地址的两个使用者后，在地址管理源修复重复分配；不自动清表、踢客户端或关闭冲突检测。" ],
             expected: "复核窗口内不再新增同一地址冲突，DHCP/静态地址分配唯一且终端通信正常。")
       end
-      offline = records("access_points").select { |ap| ap["operational_status"] && !%w[run r].include?(ap["operational_status"].downcase) }.map { |ap| ap.slice("name", "ap_id", "operational_status", "management_ip") }
+      offline = records("access_points").select { |ap| Fields.online_status(ap["operational_status"]) == :offline }.map { |ap| ap.slice("name", "ap_id", "operational_status", "management_ip") }
       if offline.any?
         tasks << item("aps_not_running", "access_points", "AP 未处于 Run 状态", evidence: offline, verify: [ "display wlan ap all verbose", "display wlan ap all" ]).merge(
           prerequisites: [ "核对这些 AP 是否应在线；按供电/交换机端口、管理 VLAN/DHCP、CAPWAP 连通性、授权和版本顺序定位，不自动重启。" ])

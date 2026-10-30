@@ -12,9 +12,9 @@ module Wireless
           "serial id" => :serial, "s/w version" => :os_version, "client count" => :client_count,
           "number of clients" => :client_count, "online clients" => :client_count, "online time" => :online_seconds, "system uptime" => :uptime_seconds }.freeze
         RADIO_FIELDS = { "admin state" => :admin_status, "state" => :admin_status, "radio type" => :protocol,
-          "type" => :protocol, "channel" => :channel, "channel usage(%)" => :utilization,
-          "channel usage" => :utilization, "noise floor" => :noise_dbm, "channel bandwidth" => :channel_width,
-          "operating bandwidth" => :channel_width, "channel band-width" => :channel_width }.freeze
+          "type" => :protocol, "channel" => :channel, "channel usage(%)" => :utilization_percent,
+          "channel usage" => :utilization_percent, "noise floor" => :noise_dbm, "channel bandwidth" => :channel_width_mhz,
+          "operating bandwidth" => :channel_width_mhz, "channel band-width" => :channel_width_mhz }.freeze
         RADIO_SECTIONS = { "operational vht-mcs set" => :vht_mcs, "operational ht mcs set" => :ht_mcs,
           "operational he-mcs set" => :he_mcs, "operational rate" => :operational_rates }.freeze
         SECTION_FIELDS = %w[mandatory supported multicast disabled].freeze
@@ -75,6 +75,7 @@ module Wireless
               owner = radio && RADIO_FIELDS.key?(label) ? radio : ap
               mapping = owner.equal?(radio) && radio ? RADIO_FIELDS : AP_FIELDS
               details = AP_DETAILS.include?(label) ? ap : RADIO_DETAILS.include?(label) ? radio : nil
+              raw = Fields.online_status(raw) if owner.equal?(ap) && mapping[label] == :operational_status
               assign_field(owner, mapping, label, raw, issues, line, details: details)
             end
           end

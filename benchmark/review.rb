@@ -25,7 +25,7 @@ Dir.mktmpdir do |root|
         "configuration" => { "cipher_suites" => %w[tkip ccmp], "security_ies" => %w[wpa rsn] } }
     end
     config = { "service_templates" => templates }
-    document = { "device" => { "name" => "AC", "host" => "192.0.2.1", "platform" => "h3c_wireless" },
+    document = { "target" => { "name" => "AC", "host" => "192.0.2.1", "platform" => "h3c" },
       "snapshot" => { "observations" => { "configuration" => { "status" => "complete", "records" => [ config ] } } } }
     expected_digest = CtxRunner::Fingerprint.call(config)
     samples = 3.times.map do

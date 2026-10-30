@@ -100,7 +100,7 @@ RSpec.describe Wireless::CLI::Collect do
     source = Struct.new(:devices).new([ { "ip" => "192.0.2.10", "vendor" => "H3C", "model" => "WX5004" } ])
     allow_any_instance_of(Net::Connector::Netdisco::Settings).to receive(:inventory).and_return(source)
     expect(run_cli("--plan", "--json", "--vendor", "h3c_wireless")).to eq(0)
-    expect(JSON.parse(@out.string).first).to include("platform" => "h3c_wireless")
+    expect(JSON.parse(@out.string).first).to include("platform" => "h3c")
     @out.truncate(0)
     @out.rewind
     expect(run_cli("--plan", "--json", "--exclude-vendor", "h3c_wireless")).to eq(1)

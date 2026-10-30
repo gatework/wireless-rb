@@ -4,6 +4,10 @@ Changes to the public contract are recorded here. Versions follow Semantic Versi
 
 ## Unreleased
 
+## 0.9.0 (2026-10-30)
+
+- Adopt schema 4 Target/Source contracts, canonical `h3c` identity and shared configuration sessions. AP provenance stores domain metadata under `context`; operational status is `:online`, `:offline` or `:unknown`. Use explicit `channel_width_mhz` and `utilization_percent`. Reuse an immutable duplicate-aware configuration index for change candidates; reject unknown change fields. Require connector 0.21 for collection.
+
 ## 0.8.0 (2026-10-29)
 
 - Load the dimension registry explicitly for standalone offline review; aggregate concurrent collection reports in a stable device order.

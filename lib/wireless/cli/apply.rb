@@ -4,34 +4,18 @@ require "ctx_cli/apply"
 require "ctx_runner/document"
 require "ctx_runner/evidence"
 require "ctx_runner/execution"
+require "ctx_runner/configuration_session"
 require "wireless"
 require_relative "report"
 require_relative "../change_plan"
 
 module Wireless
   module CLI
-    # 原生会话适配：读取使用固定查询提示符，写入由连接器识别配置模式提示符。
-    class ApplySession
-      # 借用一次已连接且独占的会话，不重连、不重放。
+    # 领域仅声明准备命令及配置语法，共享会话维护回执和读取边界。
+    class ApplySession < CtxRunner::ConfigurationSession
       def initialize(native)
-        @native = native
-      end
-
-      # 读回完整配置并交给现有解析器；部分证据不能参与前置检查或验收。
-      def read_configuration
-        [ "screen-length disable" ].each { |command| write(command) }
-        capture = CtxDriver::Reader.new(session: @native).read("display current-configuration")
-        raise IOError, "配置回读失败" unless capture.success?
-        observation = Wireless::Config.new(platform: :h3c_wireless).parse(capture.body, complete: true)
-        raise ArgumentError, "配置证据不完整" unless observation.complete? && observation.records.one?
-        CtxRunner::Document.call(observation.records.first)
-      end
-
-      # 每次只发一条命令；失败立即交还宿主，原始输出不进入终端和日志报告。
-      def write(command)
-        result = @native.execute_command(command.strip, output_sensitive: true)
-        raise IOError, "设备命令未确认" unless result.success? && result.steps.one? && result.steps.first.command.text == command.strip
-        true
+        super(session: CtxDriver::Session.new(native), preparation_commands: [ "screen-length disable" ],
+          configuration_command: "display current-configuration", parser: Wireless::Config.new(platform: :h3c))
       end
     end
 
@@ -45,7 +29,7 @@ module Wireless
       def run(argv) = @entry.run(argv)
 
       def select_plan(document, item:)
-        CtxRunner::Evidence.plan(document, item: item, platform: "h3c_wireless")
+        CtxRunner::Evidence.plan(document, item: item, platform: "h3c")
       end
 
       # 从类型化增量重新生成命令，拒绝修改后的任意脚本。

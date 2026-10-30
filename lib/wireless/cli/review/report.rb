@@ -19,7 +19,7 @@ module Wireless
           advice ||= Recommendations.new(document).call
           advice = report_advice(advice).merge(source: source, source_sha256: source_sha256)
           prefix = "recommendations/#{basename}"
-          publish("#{prefix}.json", JSON.pretty_generate(advice) + "\n")
+          publish("#{prefix}.json", JSON.pretty_generate(advice, max_nesting: 128) + "\n")
           publish("#{prefix}.txt", review_text(advice))
           publish("#{prefix}.verify.cli", advice[:items].flat_map { |item| item[:verify] }.compact.uniq.join("\n") + "\n")
           (@scripts ? %i[commands rollback] : []).each do |kind|
@@ -39,19 +39,22 @@ module Wireless
             observation = document.dig("snapshot", "observations", "configuration")
             records = observation && observation["records"]
             config = records.first if observation && observation["status"] == "complete" && records.is_a?(Array) && records.one? && records.first.is_a?(Hash)
+            index = ConfigurationIndex.new(config) if config
             config_sha256 = nil
             advice[:items].each do |item|
-              next unless config && item[:status] == "candidate" && item[:change] && ChangePlan.eligible?(config, item[:change])
-              commands, rollback = ChangePlan.render(item[:change])
+              next unless config && item[:status] == "candidate" && item[:change]
+              change = ChangePlan.candidate(item[:change], config: index)
+              next unless change
+              commands, rollback = change.commands, change.rollback
               config_sha256 ||= CtxRunner::Fingerprint.call(config)
-              plan = { schema_version: CtxRunner::Evidence::VERSION, kind: "change", platform: "h3c_wireless", device: document.fetch("device"), expected_config_sha256: config_sha256,
+              plan = { schema_version: CtxRunner::Evidence::VERSION, kind: "change", platform: "h3c", target: document.fetch("target"), expected_config_sha256: config_sha256,
                 source: source, source_sha256: source_sha256, change: item[:change], commands: commands, rollback: rollback,
                 scope: item[:scope], title: item[:title], prerequisites: item[:prerequisites], impact: item[:impact], verify: item[:verify] }
               id = [ basename, item[:change].fetch("kind"), CtxRunner::Fingerprint.call(item[:change])[0, 12] ].join("--")
               changes[id] = plan
             end
           end
-          { device: advice[:device], counts: advice[:counts], report: "#{prefix}.txt", source: source, source_sha256: source_sha256, changes: changes, plans: changes.keys }
+          { target: advice[:target], counts: advice[:counts], report: "#{prefix}.txt", source: source, source_sha256: source_sha256, changes: changes, plans: changes.keys }
         end
 
         # 离线摘要先写未完成检查点，完成所有正文后才确认生成成功。
@@ -61,11 +64,11 @@ module Wireless
           checkpoint("review.json", summary)
           lines = [ "WIRELESS 修复建议", "", "仅生成建议，未执行设备变更。candidate 需要确认条件；blocked 需要补齐参数；investigate 为排查或补采任务。", "", "设备：#{entries.size}；建议分类：#{counts}", "", "未命中规则不代表网络健康；本次不推断跨设备 Fabric 归属或完整业务基线。", "" ]
           entries.each do |entry|
-            device = entry[:device] || {}
+            device = entry[:target] || {}
             lines << "#{device['name']}（#{device['host']}）：#{entry[:counts]}；报告：#{entry[:report]}"
           end
-          plan = CtxRunner::Evidence.wrap({ platform: "h3c_wireless", changes: entries.each_with_object({}) { |entry, all| all.merge!(entry.fetch(:changes)) } }, kind: "change_plan")
-          body = JSON.pretty_generate(plan) + "\n"
+          plan = CtxRunner::Evidence.wrap({ platform: "h3c", changes: entries.each_with_object({}) { |entry, all| all.merge!(entry.fetch(:changes)) } }, kind: "change_plan")
+          body = JSON.pretty_generate(plan, max_nesting: 128) + "\n"
           summary[:plan_sha256] = Digest::SHA256.hexdigest(body)
           publish("plan.json", body)
           publish("plan.json.sha256", summary[:plan_sha256] + "\n")
@@ -83,7 +86,7 @@ module Wireless
 
         # 正文将可执行语法与未补齐的模板分开，证据使用 JSON 保持可追溯性。
         def review_text(advice)
-          device = advice[:device] || {}
+          device = advice[:target] || {}
           lines = [ "#{device['name']}（#{device['host']}）修复建议", "", "仅供审阅，未执行。证据时间：#{advice[:observed_at] || '未知'}；来源：#{advice[:source]}", "", "源文件 SHA256：#{advice[:source_sha256]}", "", "先重采确认配置未变化，再逐项确认前提；禁止整批直接粘贴。回退前确认本次变更实际生效且无并行修改。", "" ]
           lines << "当前规则没有命中；不代表网络健康或已覆盖所有配置问题。" if advice[:items].empty?
           advice[:items].each do |item|

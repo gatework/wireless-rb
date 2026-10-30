@@ -56,12 +56,12 @@ RSpec.describe "WIRELESS installed command" do
   it "reviews saved evidence without first loading the library or connector" do
     batch = File.join(@home, "saved")
     FileUtils.mkdir_p(File.join(batch, "devices"))
-    document = { schema_version: 3, kind: "collection", device: { name: "WLC", host: "192.0.2.1", platform: "h3c_wireless" }, snapshot: nil }
+    document = { schema_version: 4, kind: "collection", target: { name: "WLC", host: "192.0.2.1", platform: "h3c" }, status: "failed", snapshot: nil }
     File.write(File.join(batch, "devices", "wlc.json"), JSON.generate(document))
     _stdout, stderr, status = command("review", "--batch", batch, "--output", File.join(@home, "reviews"))
     expect(status).to be_success, stderr
     summary = JSON.parse(File.read(Dir[File.join(@home, "reviews", "*", "review.json")].fetch(0)))
-    expect(summary).to include("schema_version" => 3, "kind" => "review", "devices" => 1, "status" => "complete")
+    expect(summary).to include("schema_version" => 4, "kind" => "review", "devices" => 1, "status" => "complete")
   end
 
   it "reports a missing collection dependency without a backtrace" do
@@ -83,7 +83,7 @@ RSpec.describe "WIRELESS installed command" do
   end
 
   it "loads the library and CLI without the connector or executing a command" do
-    program = 'require "wireless/cli"; abort if defined?(Net::Connector); abort if $LOADED_FEATURES.any? { |f| f.include?("wireless/cli/collect") }'
+    program = 'require "wireless/cli"; abort if defined?(Net::Connector::Base); abort if $LOADED_FEATURES.any? { |f| f.include?("wireless/cli/collect") }'
     environment = Bundler.unbundled_env.merge("GEM_PATH" => Gem.path.join(File::PATH_SEPARATOR))
     stdout, stderr, status = Open3.capture3(environment, RbConfig.ruby, "-I#{root}/lib", "-e", program)
     expect(status).to be_success, stderr

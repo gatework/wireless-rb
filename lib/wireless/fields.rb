@@ -125,9 +125,9 @@ module Wireless
 
     # 归一化已知在线、离线标签，同时保留未识别状态。
     def online_status(raw)
-      return "online" if /\A(?:run|running|online|normal|nor|up)\z/i.match?(raw.to_s)
-      return "offline" if /\A(?:idle|fault|offline|down)\z/i.match?(raw.to_s)
-      raw
+      return :online if /\A(?:run|r|running|online|normal|nor|up)\z/i.match?(raw.to_s)
+      return :offline if /\A(?:idle|fault|offline|down)\z/i.match?(raw.to_s)
+      :unknown
     end
 
     # 身份冲突降低完整性；保留首条记录仅用于部分投影。

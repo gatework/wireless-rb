@@ -47,7 +47,7 @@ RSpec.describe Wireless::CLI::Connector do
     snapshot = Wireless::Collector.new(ap_session_factory: ->(**args) { Wireless::ApSession.new(**args) }).collect(
       connector: connector, target: { host: "192.0.2.1" }, platform: :h3c, dimensions: [ :lldp ], ap_credentials: { password: "fixture-ap" })
     expect(snapshot).to be_complete
-    expect(snapshot.observation(:lldp).evidence.first).to include(ap_name: "AP-LAB", attempted: true, status: :complete)
+    expect(snapshot.observation(:lldp).evidence.first.to_h).to include(status: :complete, context: include(ap_name: "AP-LAB", attempted: true))
     expect(transport).to be_closed
   end
 

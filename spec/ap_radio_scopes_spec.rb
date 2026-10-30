@@ -32,7 +32,7 @@ RSpec.describe "H3C AP radio detail scopes" do
     result = parser.parse(:radios, output, complete: true)
     expect(result).to be_complete
     radio = result.records.first
-    expect(radio).to include(channel_width: 80, admin_status: "Up")
+    expect(radio).to include(channel_width_mhz: 80, admin_status: "Up")
     expect(radio[:details]).to include(base_bssid: "0200-0000-0001")
     expect(radio[:details][:vht_mcs]).to include(supported: "NSS1 0,1,2,3,4,5,6,7,8,9", mandatory: nil)
     expect(radio[:details][:ht_mcs]).to include(supported: "0,1,2,3,4,5,6,7", mandatory: nil)
@@ -86,7 +86,7 @@ RSpec.describe "H3C AP radio detail scopes" do
         text = "Total APs: 1\nAP name: AP-A\nRadio 1:\n" + fields.join("\n") + "\n"
         result = parser.parse(:radios, text, complete: true)
         expect(result).to be_complete
-        expect(result.records.first[:channel_width]).to eq(40)
+        expect(result.records.first[:channel_width_mhz]).to eq(40)
       end
     end
   end

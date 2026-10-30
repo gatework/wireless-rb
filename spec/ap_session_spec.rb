@@ -5,7 +5,7 @@ require "wireless/ap_session"
 
 RSpec.describe Wireless::ApSession do
   let(:controller) { double("Controller session") }
-  let(:ap) { { name: "AP-LAB", management_ip: "192.0.2.7", operational_status: "Run" } }
+  let(:ap) { { name: "AP-LAB", management_ip: "192.0.2.7", operational_status: :online } }
   let(:reader) { described_class.new(controller: controller, password: "test-ap-password") }
   let(:commands) { [] }
 

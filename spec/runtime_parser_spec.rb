@@ -58,7 +58,7 @@ RSpec.describe Wireless::RuntimeParser do
     expect(ap).to be_complete
     expect(only_record(ap.records)).to include(name: "AP-LAB", ap_id: "7", mac_address: "02:00:00:00:00:07", management_ip: "192.0.2.7")
     expect(radio).to be_complete
-    expect(only_record(radio.records)).to include(ap_name: "AP-LAB", radio_id: "1", channel: 1, channel_width: 40, utilization: 0, noise_dbm: -90)
+    expect(only_record(radio.records)).to include(radio_id: "1", channel: 1, channel_width_mhz: 40, utilization_percent: 0, noise_dbm: -90, ap_name: "AP-LAB")
     expect(only_record(radio.records)).not_to have_key(:tx_power_dbm)
     expect(only_record(radio.records).dig(:details, :max_power)).to eq("20")
   end
@@ -139,7 +139,7 @@ RSpec.describe Wireless::RuntimeParser do
   it "rejects invalid measurements without replacing them with plausible zeroes" do
     parsed = parser.parse(:radios, ap_text.sub("Channel usage(%) : 0", "Channel usage(%) : 101"), complete: true)
     expect(parsed).to be_partial
-    expect(only_record(parsed.records)[:utilization]).to be_nil
+    expect(only_record(parsed.records)[:utilization_percent]).to be_nil
     expect(parser.parse(:clients, "\xff".b, complete: true).status).to eq(:failed)
     expect(parser.parse(:clients, "% Unrecognized command found at '^' position.\n", complete: true).status).to eq(:unsupported)
   end
@@ -157,7 +157,7 @@ RSpec.describe Wireless::RuntimeParser do
     text = "#{header}0 0200-0000-0007 AP-HW LAB 192.0.2.7 AP6050 nor 0 001:02:03:04\nTotal: 1\n"
     parsed = Wireless::RuntimeParser.new(platform: "huawei").parse(:access_points, text, complete: true)
     expect(parsed).to be_complete
-    expect(only_record(parsed.records)).to include(operational_status: "online", client_count: 0, uptime_seconds: 93_784)
+    expect(only_record(parsed.records)).to include(operational_status: :online, client_count: 0, uptime_seconds: 93_784)
     expect(Wireless::RuntimeParser.new(platform: "huawei").parse(:access_points, header, complete: true).status).to eq(:failed)
   end
   it "rejects malformed dimension requests before interpreting device output" do

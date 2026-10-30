@@ -33,7 +33,7 @@ module Wireless
           validate(entry[2])
           entry << Recommendations.new(entry[2]).call
         end
-        hosts = documents.map { |entry| entry[2]["device"]["host"] }
+        hosts = documents.map { |entry| entry[2]["target"]["host"] }
         raise ArgumentError, "设备身份重复" unless hosts.uniq == hosts
         nil
       end

@@ -41,7 +41,7 @@ module Wireless
     def read(access_point:)
       return { error: :controller_session_lost, skipped: true } unless @usable
       return { error: :ap_address_unavailable, skipped: true } unless access_point.is_a?(Hash)
-      return { error: :ap_not_online, skipped: true } unless Fields.online_status(access_point[:operational_status]) == "online"
+      return { error: :ap_not_online, skipped: true } unless Fields.online_status(access_point[:operational_status]) == :online
       address = ap_ipv4_address(access_point)
       return { error: :ap_address_unavailable, skipped: true } unless address
 

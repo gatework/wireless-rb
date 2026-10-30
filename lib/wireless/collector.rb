@@ -41,8 +41,13 @@ module Wireless
     def collect_request(target:, platform:, model:, dimensions:, ap_credentials:, ap_names:, connector: nil, session: nil)
       platform = platform.to_s.dup.freeze
       model = model.dup.freeze if model.is_a?(String)
-      target = CtxRunner::Target.snapshot(target)
+      target = CtxRunner::Target.coerce(target).to_h
 
+      platform = ParserRegistry.canonical(platform).to_s
+      if target[:platform] && ParserRegistry.canonical(target[:platform]).to_s != platform
+        raise ArgumentError, "Target platform differs from the requested platform"
+      end
+      target = target.merge(platform: platform)
       profile = ParserRegistry.fetch(platform, model: model)
       dimensions = profile.commands.keys - [ :lldp ] if dimensions.nil?
 

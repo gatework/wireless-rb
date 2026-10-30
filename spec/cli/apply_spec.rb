@@ -32,10 +32,10 @@ RSpec.describe "Wireless interactive apply" do
       process_environment = env || (file_credentials ? { "NC_DEVICE_USERNAME" => "process-user" } : { "NC_DEVICE_USERNAME" => "test" })
       credentials = []
       commands, rollback = Wireless::ChangePlan.render(change)
-      plan = { schema_version: 3, kind: "change", platform: "h3c_wireless", device: { "host" => "192.0.2.1", "name" => "test" }, expected_config_sha256: CtxRunner::Fingerprint.call(config), change: change, commands: commands, rollback: rollback, prerequisites: [], impact: "test" }
+      plan = { schema_version: 4, kind: "change", platform: "h3c", target: { "host" => "192.0.2.1", "name" => "test", "platform" => "h3c" }, expected_config_sha256: CtxRunner::Fingerprint.call(config), change: change, commands: commands, rollback: rollback, prerequisites: [], impact: "test" }
       plan[:commands] = [ "reboot" ] if altered
       path = File.join(root, "plan.json")
-      File.write(path, JSON.generate(schema_version: 3, kind: "change_plan", platform: "h3c_wireless", changes: { "test-change" => plan }))
+      File.write(path, JSON.generate(schema_version: 4, kind: "change_plan", platform: "h3c", changes: { "test-change" => plan }))
       File.write("#{path}.sha256", Digest::SHA256.file(path).hexdigest)
       token = "APPLY 192.0.2.1 #{Digest::SHA256.file(path).hexdigest[0, 12]} test-change"
       input = tty ? terminal(confirmation ? "#{token}\n" : "no\n") : StringIO.new("#{token}\n")

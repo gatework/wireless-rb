@@ -11,7 +11,7 @@ gem "rubocop-rails-omakase", require: false
 
 # CLI 传输及环境文件保持为可选依赖，纯解析安装无需它们。
 group :examples do
-  gem "net-connector", "~> 0.20.0", require: false
+  gem "net-connector", "~> 0.21.0", require: false
 end
 
 gem "ctx_driver", ">= 0.2.2"

@@ -35,13 +35,16 @@ module Wireless
       def load_network
         require "net/connector"
       rescue LoadError
-        raise LoadError, "联网采集需要 net-connector >= 0.20.0；请在宿主 Gemfile 添加或 gem install net-connector", cause: nil
+        raise LoadError, "联网采集需要 net-connector >= 0.21.0；请在宿主 Gemfile 添加或 gem install net-connector", cause: nil
       end
 
       # YAML 静态设备或显式 Netdisco 来源二选一；选中地址的所有冲突记录在连接前拒绝。
       def inventory(options, progress:)
         values = options.values
-        selection = Net::Connector::Inventory::Filters.selection(values)
+        filters = values.merge(%w[vendors exclude_vendors].to_h do |key|
+          [ key, values.fetch(key, []).map { |vendor| vendor == "h3c" ? "h3c_wireless" : vendor } ]
+        end)
+        selection = Net::Connector::Inventory::Filters.selection(filters)
         rows = if values["netdisco_config"] || values["netdisco"] || values["inventory"]
           progress.reading_inventory
           settings = options.netdisco_settings
@@ -64,7 +67,7 @@ module Wireless
         targets = options.normalize_devices(rows)
         total = targets.size
         selected = targets.select do |device|
-          selection.selected?(device.fetch("host"), device.fetch("platform"), name: device["name"], model: device["model"])
+          selection.selected?(device.fetch("host"), device.fetch("platform") == "h3c" ? "h3c_wireless" : device.fetch("platform"), name: device["name"], model: device["model"])
         end
         [ selected, total ]
       end

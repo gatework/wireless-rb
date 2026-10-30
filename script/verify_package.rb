@@ -108,7 +108,7 @@ Dir.mktmpdir("gem-install-") do |home|
       system(command, "apply", "--help", exception: true)
       require "json"
       FileUtils.mkdir_p("saved/devices")
-      File.write("saved/devices/ac.json", JSON.generate(schema_version: 3, kind: "collection", device: { name: "AC", host: "192.0.2.1", platform: "h3c_wireless" }, snapshot: { collection_status: "complete", observed_at: "2026-10-29T00:00:00.000000Z", target: { host: "192.0.2.1" }, observations: { configuration: configuration.to_h } }))
+      File.write("saved/devices/ac.json", JSON.generate(schema_version: 4, kind: "collection", target: { name: "AC", host: "192.0.2.1", platform: "h3c_wireless" }, snapshot: { collection_status: "complete", observed_at: "2026-10-29T00:00:00.000000Z", target: { host: "192.0.2.1" }, observations: { configuration: configuration.to_h } }))
       system(command, "review", "--batch", "saved", "--output", "reviews", exception: true)
       abort "Missing installed review artifacts" unless Dir["reviews/*/recommendations/*.txt"].size == 1 && Dir["reviews/*/review.txt"].size == 1
       abort "Unexpected Markdown review artifacts" unless Dir["reviews/**/*.md"].empty?
@@ -120,7 +120,7 @@ Dir.mktmpdir("gem-install-") do |home|
       expect_package = #{expect_artifact.inspect}
       system(RbConfig.ruby, "-S", "gem", "install", expect_package, "--local", "--no-document", exception: true) if expect_package
       connector_package = #{connector_artifact.inspect}
-      installation = connector_package ? [ connector_package, "--local" ] : [ "net-connector", "--version", "~> 0.20.0" ]
+      installation = connector_package ? [ connector_package, "--local" ] : [ "net-connector", "--version", "~> 0.21.0" ]
       system(RbConfig.ruby, "-S", "gem", "install", *installation, "--no-document", exception: true)
       system(command, "collect", "--help-all", exception: true)
       system(command, "collect", "--init", "--non-interactive", exception: true)

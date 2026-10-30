@@ -23,7 +23,7 @@ RSpec.describe Wireless::ApCollection do
 
     result = collection.collect(session: session, access_points: access_points, names: names)
 
-    expect(result.evidence).to contain_exactly(include(ap_name: "AP-1", status: :complete))
+    expect(result.evidence.map(&:to_h)).to contain_exactly(include(status: :complete, context: include(ap_name: "AP-1")))
     expect(names).to eq([ "AP-2" ])
   end
 

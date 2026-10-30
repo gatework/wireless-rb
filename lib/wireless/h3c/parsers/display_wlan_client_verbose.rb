@@ -10,7 +10,7 @@ module Wireless
         MAPPING = COMMON_FIELDS.merge("mac address" => :client_mac, "ipv4 address" => :client_ip,
           "ip address" => :client_ip, "ipv6 address" => :client_ipv6, "username" => :username,
           "channel" => :channel, "frequency band" => :band, "state" => :operational_status, "status" => :operational_status,
-          "wireless mode" => :protocol, "channel bandwidth" => :channel_width, "sm power save mode" => :power_save_mode,
+          "wireless mode" => :protocol, "channel bandwidth" => :channel_width_mhz, "sm power save mode" => :power_save_mode,
           "sm power save" => :power_save, "qos mode" => :qos, "online time" => :online_seconds,
           "authentication method" => :auth_method, "security mode" => :security, "akm mode" => :akm,
           "cipher suite" => :cipher).freeze

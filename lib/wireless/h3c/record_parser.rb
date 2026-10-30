@@ -61,12 +61,12 @@ module Wireless
         if record && (field = mapping[label])
           with_field_validation(issues, line) do
             # 优先使用运行带宽；80+80MHz 等歧义值保持原义，不截断为单个数值。
-            if field == :channel_width
+            if field == :channel_width_mhz
               label = "channel bandwidth" if label == "channel band-width"
               assign_value(record[:details] ||= {}, label.tr(" ", "_").to_sym, raw, issues, line)
               return if label == "channel bandwidth" && @field_assignments.fetch(record[:details]).key?(:operating_bandwidth)
             end
-            assign_value(record, field, convert_field(field, raw, label: label), issues, line, identity: field == :channel_width ? label : field)
+            assign_value(record, field, convert_field(field, raw, label: label), issues, line, identity: field == :channel_width_mhz ? label : field)
           end
         elsif details
           value = label.end_with?("url") ? !raw.nil? && !raw.strip.empty? : raw
@@ -92,12 +92,12 @@ module Wireless
         when :vlan, :service_vlan, :initial_vlan_id, :authorized_vlan_id
           Fields.vlan_id(raw)
         when :channel then Fields.channel(raw)
-        when :channel_width then Fields.channel_width_mhz(raw)
+        when :channel_width_mhz then Fields.channel_width_mhz(raw)
         when :band then Fields.frequency_band(raw)
         when :noise_dbm then Fields.number(raw, unit: "dBm")&.then { |number| number if number.negative? }
-        when :utilization
+        when :utilization_percent
           number = Fields.number(raw, unit: "%")
-          raise ArgumentError, "Invalid wireless utilization" if number && !(0..100).cover?(number)
+          raise ArgumentError, "Invalid wireless utilization_percent" if number && !(0..100).cover?(number)
           number&.round
         else raw
         end

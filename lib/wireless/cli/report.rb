@@ -29,14 +29,14 @@ module Wireless
 
       # 每台完成后立即原子保存，即使批次随后取消仍可读取已完成证据。
       def write(result, snapshot: nil)
-        device = result.fetch(:device)
+        device = result.fetch(:target)
         name = "#{device.fetch('name').gsub(/[^A-Za-z0-9_.-]/, '_')[0, 100]}-#{device.fetch('host').tr(':', '_')}"
         # 保存状态属于批次宿主；不能让正在发布的文件预先声明自身已保存。
         body = result.reject { |key, _| key == :report_saved }.merge(snapshot: snapshot && snapshot.to_h)
         document = CtxRunner::Evidence.wrap(body, kind: "collection")
         advice = report_advice(Recommendations.new(document).call)
         document = document.merge("recommendations" => advice)
-        json = JSON.pretty_generate(document) + "\n"
+        json = JSON.pretty_generate(document, max_nesting: 128) + "\n"
         publish("devices/#{name}.json", json)
         lines = [ "设备：#{device.fetch('name')}（#{device.fetch('host')}）", "证据：#{result.fetch(:status)}", "此结果不代表 无线网络健康。" ]
         result.fetch(:dimensions, {}).each do |dimension, facts|
@@ -50,7 +50,7 @@ module Wireless
       end
 
       def finish_collected_review
-        entries = @review_lock.synchronize { @review_entries.sort_by { |entry| entry[:device].fetch("host") } }
+        entries = @review_lock.synchronize { @review_entries.sort_by { |entry| entry[:target].fetch("host") } }
         finish_review(entries, source_batch: directory)
       end
 
@@ -67,7 +67,7 @@ module Wireless
           text << "进度输出错误：#{summary['output_error']['error_type']}；设备结果已保留" if summary["output_error"]
           summary.fetch("devices").each do |r|
             saved = r["report_saved"] == true ? "已保存" : "保存未确认"
-            text << "#{r['device']['host']}\t#{r['device']['name']}\t#{r['status']}\t#{saved}\t#{r['error']}"
+            text << "#{r['target']['host']}\t#{r['target']['name']}\t#{r['status']}\t#{saved}\t#{r['error']}"
           end
           pending.each { |device| text << "#{device['host']}\t#{device['name']}\t未采集" }
           text.join("\n") + "\n"

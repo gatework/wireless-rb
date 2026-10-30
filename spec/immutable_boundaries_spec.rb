@@ -36,7 +36,7 @@ RSpec.describe "Immutable facts and evidence" do
 
   [ Wireless ].each do |domain|
     it "detaches #{domain} evidence and timestamps from caller state" do
-      evidence = [ { command: +"show test", sha256: +"digest" } ]
+      evidence = [ { command: +"show test", sha256: +("a" * 64), bytes: 1 } ]
       time = Time.now
             value = domain::Observation.new(name: :configuration, status: :complete,
         evidence: evidence, started_at: time, completed_at: time)
@@ -59,10 +59,10 @@ RSpec.describe "Immutable facts and evidence" do
       attributes[:fabric_key]&.clear
 
       expect(value).to be_complete
-      expect(value.target[:host]).to eq("192.0.2.1")
+      expect(value.target.host).to eq("192.0.2.1")
       expect(value.fabric_key).to eq("LAB") if attributes.key?(:fabric_key)
       expect { value.observations.clear }.to raise_error(FrozenError)
-      expect { value.target[:id].clear }.to raise_error(FrozenError)
+      expect { value.target.id.clear }.to raise_error(FrozenError)
       expect(value.observed_at).to be_frozen
     end
   end
@@ -100,7 +100,7 @@ RSpec.describe "Immutable facts and evidence" do
 
   it "keeps fact, target and projection contents out of display strings" do
     observation = Wireless::Observation.new(name: :clients, status: :complete,
-      records: [ { username: "PRIVATE_FACT" } ], evidence: [ { detail: "PRIVATE_EVIDENCE" } ])
+      records: [ { username: "PRIVATE_FACT" } ], evidence: [ { reference: "PRIVATE_EVIDENCE" } ])
     snapshot = Wireless::Snapshot.new(target: { host: "192.0.2.1", name: "PRIVATE_TARGET" }, observations: { clients: observation })
     projection = Wireless::Projection.new(dimensions: { clients: { status: :complete, detail: "PRIVATE_PROJECTION" } })
     [ observation, snapshot, projection ].each do |value|
