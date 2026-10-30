@@ -13,7 +13,7 @@ RSpec.describe Wireless::ApCollection do
 
   it "keeps AP selection independent of clock and credential callbacks" do
     names = [ +"AP-1" ]
-    capture = CtxDriver::Capture.new(command: Wireless::H3c::Profile::COMMANDS.fetch(:lldp),
+    capture = CtxDriver::Capture.new(command: Wireless::H3c::Profile::DECLARATIONS.by_dimension.fetch(:lldp),
       body: "No LLDP neighbors\n", started_at: now, completed_at: now)
     reader = double("AP reader")
     expect(reader).to receive(:read).with(access_point: include(name: "AP-1")).once.and_return(result: capture)

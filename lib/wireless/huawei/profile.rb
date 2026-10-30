@@ -12,8 +12,6 @@ module Wireless
         { dimensions: [ :access_points ], command: "display ap all", parser: Parsers::DisplayApAll },
         { dimensions: [ :clients ], command: "display station all", parser: Parsers::DisplayStationAll }
       ])
-      COMMANDS = DECLARATIONS.by_dimension
-      PARSERS = DECLARATIONS.parsers
 
       # 本平台使用临时会话分页设置。
       def preparation_command = "screen-length 0 temporary"

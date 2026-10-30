@@ -71,7 +71,7 @@ module Wireless
     # 单个 AP 脚本或解析失败不能丢弃其他 AP 的邻居观测。
     def read_ap_neighbors(ap_session, ap)
       stage = :execute
-      source = { kind: :ap_lldp_result, ap_name: ap[:name], command: H3c::Profile::COMMANDS.fetch(:lldp),
+      source = { kind: :ap_lldp_result, ap_name: ap[:name], command: H3c::Profile::DECLARATIONS.by_dimension.fetch(:lldp),
         attempted: true, status: :failed, neighbor_count: 0 }
       outcome = ap_session.read(access_point: ap)
       stage = :response

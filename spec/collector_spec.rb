@@ -200,7 +200,7 @@ RSpec.describe Wireless::Collector do
   it "binds AP evidence to the selected AP and LLDP command while retaining capture metadata" do
     outputs["display wlan ap all verbose"] = "Total number of APs : 1\nAP name : AP-LAB\nAP ID : 7\nState : Run\n"
     now = Time.utc(2026, 10, 17)
-    command = Wireless::H3c::Profile::COMMANDS.fetch(:lldp)
+    command = Wireless::H3c::Profile::DECLARATIONS.by_dimension.fetch(:lldp)
     capture = CtxDriver::Capture.new(command: command, body: "No LLDP neighbors\n", started_at: now, completed_at: now,
       evidence: [ { sha256: "a" * 64, bytes: 18, observed_at: now.iso8601,
         command: "unrelated-command", status: :failed, context: { kind: :other, ap_name: "OTHER-AP", attempted: false, neighbor_count: 99 } } ])
@@ -218,7 +218,7 @@ RSpec.describe Wireless::Collector do
     outputs["display wlan ap all verbose"] = "Total number of APs : 1\nAP name : AP-LAB\nAP ID : 7\nState : Run\n"
     now = Time.utc(2026, 10, 17)
     [ { command: "display unrelated", skipped: false },
-      { command: Wireless::H3c::Profile::COMMANDS.fetch(:lldp), skipped: true } ].each do |attributes|
+      { command: Wireless::H3c::Profile::DECLARATIONS.by_dimension.fetch(:lldp), skipped: true } ].each do |attributes|
       capture = CtxDriver::Capture.new(command: attributes[:command], body: "No LLDP neighbors\n",
         started_at: now, completed_at: now)
       ap_reader = double("AP reader", read: { result: capture, skipped: attributes[:skipped] })
@@ -251,7 +251,7 @@ RSpec.describe Wireless::Collector do
   it "normalizes non-symbol AP failure codes while retaining captured neighbor facts" do
     outputs["display wlan ap all verbose"] = "Total number of APs : 1\nAP name : AP-LAB\nAP ID : 7\nState : Run\n"
     now = Time.utc(2026, 10, 17)
-    capture = CtxDriver::Capture.new(command: Wireless::H3c::Profile::COMMANDS.fetch(:lldp),
+    capture = CtxDriver::Capture.new(command: Wireless::H3c::Profile::DECLARATIONS.by_dimension.fetch(:lldp),
       body: "LLDP neighbor-information of port 1[GE1]:\nLLDP neighbor index: 1\nChassis ID: switch\nPort ID: GE2\n",
       started_at: now, completed_at: now)
     %i[error cleanup_error close_error].each do |key|
@@ -271,7 +271,7 @@ RSpec.describe Wireless::Collector do
   it "retains safe failed AP capture diagnostics and skipped execution without duplicate outcome fields" do
     outputs["display wlan ap all verbose"] = "Total number of APs : 1\nAP name : AP-LAB\nAP ID : 7\nState : Run\n"
     now = Time.utc(2026, 10, 17)
-    capture = CtxDriver::Capture.new(command: Wireless::H3c::Profile::COMMANDS.fetch(:lldp),
+    capture = CtxDriver::Capture.new(command: Wireless::H3c::Profile::DECLARATIONS.by_dimension.fetch(:lldp),
       started_at: now, completed_at: now, skipped: true,
       failure: { code: :session_closed, stage: :session, error_type: "IOError", message: "private device text" })
     ap_reader = double("AP reader", read: { result: capture })
@@ -287,7 +287,7 @@ RSpec.describe Wireless::Collector do
   it "combines AP skipped flags and does not repeat the capture failure as an outcome error" do
     outputs["display wlan ap all verbose"] = "Total number of APs : 1\nAP name : AP-LAB\nAP ID : 7\nState : Run\n"
     now = Time.utc(2026, 10, 17)
-    capture = CtxDriver::Capture.new(command: Wireless::H3c::Profile::COMMANDS.fetch(:lldp),
+    capture = CtxDriver::Capture.new(command: Wireless::H3c::Profile::DECLARATIONS.by_dimension.fetch(:lldp),
       started_at: now, completed_at: now, failure: { code: :session_closed, stage: :session })
     ap_reader = double("AP reader", read: { result: capture, error: :session_closed, skipped: true })
     reader = described_class.new(ap_session_factory: ->(controller:) { ap_reader })

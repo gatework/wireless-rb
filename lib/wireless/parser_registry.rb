@@ -9,7 +9,7 @@ module Wireless
   PROFILES = { h3c: H3c::Profile, huawei: Huawei::Profile }.freeze
   PLATFORM_ALIASES = { h3c_wireless: :h3c }.freeze
   SUPPORTED_PLATFORMS = (PROFILES.keys + PLATFORM_ALIASES.keys).map { |platform| platform.to_s.freeze }.freeze
-  SUPPORTED_DIMENSIONS = PROFILES.values.flat_map { |profile| profile::COMMANDS.keys }.uniq.freeze
+  SUPPORTED_DIMENSIONS = PROFILES.values.flat_map { |profile| profile::DECLARATIONS.by_dimension.keys }.uniq.freeze
 
   # 将 h3c_wireless 视为 H3C 无线平台策略的连接器别名。
   ParserRegistry = CtxParser::Registry.new(profiles: PROFILES, aliases: PLATFORM_ALIASES)

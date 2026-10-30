@@ -119,7 +119,7 @@ module Wireless
         next if observation["status"] == "complete"
         item("evidence_incomplete", name, "证据不完整，先补采", category: "evidence",
           evidence: { status: observation["status"], issues: observation.fetch("issues", []).map { |issue| issue["code"] } },
-          verify: @h3c ? Array(H3c::Profile::COMMANDS[name.to_sym]) : [])
+          verify: @h3c ? Array(H3c::Profile::DECLARATIONS.by_dimension[name.to_sym]) : [])
       end
     end
 

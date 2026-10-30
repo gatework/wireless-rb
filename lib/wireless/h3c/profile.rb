@@ -28,8 +28,6 @@ module Wireless
         { dimensions: [ :blocked_clients ], command: "display wlan client-security block-mac", parser: Parsers::DisplayWlanClientSecurityBlockMac },
         { dimensions: [ :lldp ], command: "display lldp neighbor-information verbose", parser: Parsers::DisplayLldpNeighborInformationVerbose }
       ])
-      COMMANDS = DECLARATIONS.by_dimension
-      PARSERS = DECLARATIONS.parsers
 
       # 本平台在当前控制器会话禁用分页。
       def preparation_command = "screen-length disable"

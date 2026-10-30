@@ -10,7 +10,7 @@ require_relative "ap_collection"
 module Wireless
   # 按单控制器顺序采集，去重共享查询，并区分失败与跳过维度。
   class Collector
-    H3C_COMMANDS = H3c::Profile::COMMANDS.except(:lldp).freeze
+    H3C_COMMANDS = H3c::Profile::DECLARATIONS.by_dimension.except(:lldp).freeze
     DEFAULT_DIMENSIONS = H3C_COMMANDS.keys.freeze
 
     # 注入时钟和可选 AP 会话工厂；核心采集不加载具体传输。

@@ -182,3 +182,5 @@ Dynamic inventory uses `Netdisco::Catalog`. Any duplicate row for a selected add
 ## Domain contract migration (2026-10-30)
 
 Adopt schema 4 Target/Source contracts, canonical `h3c` identity and shared configuration sessions. AP provenance stores domain metadata under `context`; operational status is `:online`, `:offline` or `:unknown`. Use explicit `channel_width_mhz` and `utilization_percent`. Reuse an immutable duplicate-aware configuration index for change candidates; reject unknown change fields. Require connector 0.21 for collection. See the [schema 4 migration and module contracts](https://github.com/gatework/ctx_runner/blob/main/docs/contracts-2026-10-30.md). Regenerate old collection reports and change plans; changing only their version number is not supported.
+
+Platform profiles use ctx_parser 0.5 `Commands` declarations. Replace `Profile::COMMANDS` / `Profile::PARSERS` with `Profile::DECLARATIONS.by_dimension` / `.parsers`; instance query methods remain available. See the [parser 0.5 migration](https://github.com/gatework/ctx_parser/blob/main/docs/contracts-0.5.md).
